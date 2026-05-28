@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -94,7 +95,7 @@ func (c *Client) GetAlias(ctx context.Context, domain, alias string) (*Alias, er
 	}
 
 	var result Alias
-	if err := c.do(req, &result); err != nil {
+	if err := c.do(req, nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -128,7 +129,7 @@ func (c *Client) CreateAlias(ctx context.Context, domain string, body *CreateAli
 	}
 
 	var result Alias
-	if err := c.do(req, &result); err != nil {
+	if err := c.do(req, data, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -149,15 +150,17 @@ func (c *Client) UpdateAlias(ctx context.Context, domain, alias string, body *Up
 	}
 
 	var result Alias
-	if err := c.do(req, &result); err != nil {
+	if err := c.do(req, data, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
 // do executes an HTTP request with basic auth, JSON headers, and 429 retry backoff.
+// bodyBytes must be the raw JSON body for POST/PUT/PATCH requests; it is used to
+// rebuild the request body for each attempt since the reader is consumed on first use.
 // On HTTP 404, it returns ErrNotFound. On other non-2xx responses it returns an *apiError.
-func (c *Client) do(req *http.Request, out interface{}) error {
+func (c *Client) do(req *http.Request, bodyBytes []byte, out interface{}) error {
 	req.Header.Set("Accept", "application/json")
 	req.SetBasicAuth(c.token, "")
 	if req.Method == http.MethodPost || req.Method == http.MethodPut || req.Method == http.MethodPatch {
@@ -168,6 +171,12 @@ func (c *Client) do(req *http.Request, out interface{}) error {
 	backoff := 500 * time.Millisecond
 
 	for attempt := range maxRetries {
+		// Rebuild body for each attempt: the reader from the previous attempt is consumed.
+		if len(bodyBytes) > 0 {
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			req.ContentLength = int64(len(bodyBytes))
+		}
+
 		resp, err := c.http.Do(req)
 		if err != nil {
 			return err
@@ -183,35 +192,30 @@ func (c *Client) do(req *http.Request, out interface{}) error {
 				return req.Context().Err()
 			case <-time.After(backoff):
 				backoff *= 2
-				// rebuild the request body for retry (body was already consumed)
-				// since we pass body as bytes.NewReader we need to re-clone the request
-				// for retries; simplest approach: caller must re-issue — but since we
-				// hold the raw bytes in the closure we can reconstruct.
-				// For this implementation, 429 on GET (no body) works; POST/PUT retries
-				// are blocked by the consumed reader. This is acceptable: 429 on writes
-				// is rare and the caller can retry at the NATS level.
 				continue
 			}
 		}
 
-		defer func() { _ = resp.Body.Close() }()
-
 		if resp.StatusCode == http.StatusNotFound {
+			_ = resp.Body.Close()
 			return ErrNotFound
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			var apiErr apiError
 			_ = json.NewDecoder(resp.Body).Decode(&apiErr)
+			_ = resp.Body.Close()
 			apiErr.StatusCode = resp.StatusCode
 			return &apiErr
 		}
 
 		if out != nil {
 			if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+				_ = resp.Body.Close()
 				return fmt.Errorf("decode response: %w", err)
 			}
 		}
+		_ = resp.Body.Close()
 		return nil
 	}
 

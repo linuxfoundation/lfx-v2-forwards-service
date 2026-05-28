@@ -41,13 +41,17 @@ func InitInfrastructure(ctx context.Context, cfg AppConfig) error {
 	authClient := authsvc.New(NATSClient, cfg.AuthServiceSubject)
 	feClient := femail.New(cfg.ForwardEmailAPIToken, cfg.ForwardEmailBaseURL)
 
-	ForwardSvc = service.New(service.Config{
-		JWTConfig:     jwtCfg,
-		AuthClient:    authClient,
-		FEmailClient:  feClient,
-		Domains:       cfg.ForwardsDomains,
-		ExtraReserved: cfg.ForwardsReservedNames,
+	ForwardSvc, err = service.New(service.Config{
+		JWTConfig:          jwtCfg,
+		AuthClient:         authClient,
+		FEmailClient:       feClient,
+		Domains:            cfg.ForwardsDomains,
+		ExtraReserved:      cfg.ForwardsReservedNames,
+		AuthServiceTimeout: cfg.AuthServiceRequestTimeout,
 	})
+	if err != nil {
+		return fmt.Errorf("init forward service: %w", err)
+	}
 
 	slog.InfoContext(ctx, "infrastructure initialised",
 		"domains", cfg.ForwardsDomains,

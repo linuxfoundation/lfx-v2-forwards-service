@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -21,35 +22,41 @@ import (
 
 // ForwardService implements the business logic for the forwards service.
 type ForwardService struct {
-	jwtCfg        *jwtpkg.Config
-	authClient    port.AuthServiceClient
-	feClient      port.ForwardEmailProvider
-	domains       []string
-	extraReserved []string
+	jwtCfg             *jwtpkg.Config
+	authClient         port.AuthServiceClient
+	feClient           port.ForwardEmailProvider
+	domains            []string
+	extraReserved      []string
+	authServiceTimeout time.Duration
 }
 
 // Config holds the dependencies and settings for ForwardService.
 type Config struct {
-	JWTConfig     *jwtpkg.Config
-	AuthClient    port.AuthServiceClient
-	FEmailClient  port.ForwardEmailProvider
-	Domains       []string
-	ExtraReserved []string
+	JWTConfig          *jwtpkg.Config
+	AuthClient         port.AuthServiceClient
+	FEmailClient       port.ForwardEmailProvider
+	Domains            []string
+	ExtraReserved      []string
+	AuthServiceTimeout time.Duration
 }
 
-// New creates a ForwardService.
-func New(cfg Config) *ForwardService {
-	domains := cfg.Domains
-	if len(domains) == 0 {
-		domains = []string{"linux.com"}
+// New creates a ForwardService. Returns an error if Domains is empty.
+func New(cfg Config) (*ForwardService, error) {
+	if len(cfg.Domains) == 0 {
+		return nil, fmt.Errorf("ForwardService requires at least one configured domain")
+	}
+	timeout := cfg.AuthServiceTimeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
 	}
 	return &ForwardService{
-		jwtCfg:        cfg.JWTConfig,
-		authClient:    cfg.AuthClient,
-		feClient:      cfg.FEmailClient,
-		domains:       domains,
-		extraReserved: cfg.ExtraReserved,
-	}
+		jwtCfg:             cfg.JWTConfig,
+		authClient:         cfg.AuthClient,
+		feClient:           cfg.FEmailClient,
+		domains:            cfg.Domains,
+		extraReserved:      cfg.ExtraReserved,
+		authServiceTimeout: timeout,
+	}, nil
 }
 
 // resolveDomain returns the domain to use for a request. The requested value is
@@ -104,11 +111,17 @@ type SetTargetResult struct {
 }
 
 // HandleSetTarget creates or updates the forwarding routing for the caller's alias on the given domain.
-// Returns errCode "unauthorized", "not_found", "domain_required", "domain_not_allowed", or "forwardemail_error" on failure.
+// Returns errCode "unauthorized", "not_found", "target_email_invalid", "domain_required", "domain_not_allowed", or "forwardemail_error" on failure.
 func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, requestedDomain, targetEmail string) (SetTargetResult, string) {
 	domain, errCode := s.resolveDomain(requestedDomain)
 	if errCode != "" {
 		return SetTargetResult{}, errCode
+	}
+
+	// Verify JWT signature locally (defense in depth); auth-service re-validates below.
+	if _, err := s.jwtCfg.Verify(ctx, authToken); err != nil {
+		slog.WarnContext(ctx, "set_target: JWT verification failed", "error", err)
+		return SetTargetResult{}, "unauthorized"
 	}
 
 	// Extract sub locally for the lfid: label (auth-service also validates the JWT).
@@ -118,7 +131,10 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 		return SetTargetResult{}, "unauthorized"
 	}
 
-	alias, err := s.authClient.GetAliasForDomain(ctx, authToken, domain)
+	authCtx, authCancel := context.WithTimeout(ctx, s.authServiceTimeout)
+	defer authCancel()
+
+	alias, err := s.authClient.GetAliasForDomain(authCtx, authToken, domain)
 	if err != nil {
 		if errors.Is(err, authservice.ErrNoAliasForDomain) {
 			return SetTargetResult{}, "not_found"
@@ -129,7 +145,10 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 
 	targetEmail = strings.TrimSpace(targetEmail)
 	if targetEmail == "" {
-		return SetTargetResult{}, "forwardemail_error"
+		return SetTargetResult{}, "target_email_invalid"
+	}
+	if _, err := mail.ParseAddress(targetEmail); err != nil {
+		return SetTargetResult{}, "target_email_invalid"
 	}
 
 	exists, err := s.feClient.AliasExists(ctx, domain, alias)
@@ -151,7 +170,7 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 			slog.ErrorContext(ctx, "set_target: create alias failed", "alias", alias, "error", err)
 			return SetTargetResult{}, "forwardemail_error"
 		}
-		updatedAt = parseUpdatedAt(created.UpdatedAt)
+		updatedAt = parseUpdatedAt(ctx, created.UpdatedAt)
 		slog.InfoContext(ctx, "set_target: alias created", "alias", alias, "domain", domain)
 	} else {
 		updated, err := s.feClient.UpdateAlias(ctx, domain, alias, &femail.UpdateAliasRequest{
@@ -162,7 +181,7 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 			slog.ErrorContext(ctx, "set_target: update alias failed", "alias", alias, "error", err)
 			return SetTargetResult{}, "forwardemail_error"
 		}
-		updatedAt = parseUpdatedAt(updated.UpdatedAt)
+		updatedAt = parseUpdatedAt(ctx, updated.UpdatedAt)
 		slog.InfoContext(ctx, "set_target: alias updated", "alias", alias, "domain", domain)
 	}
 
@@ -189,7 +208,16 @@ func (s *ForwardService) HandleGetForward(ctx context.Context, authToken, reques
 		return GetForwardResult{}, errCode
 	}
 
-	alias, err := s.authClient.GetAliasForDomain(ctx, authToken, domain)
+	// Verify JWT signature locally (defense in depth); auth-service re-validates below.
+	if _, err := s.jwtCfg.Verify(ctx, authToken); err != nil {
+		slog.WarnContext(ctx, "get_forward: JWT verification failed", "error", err)
+		return GetForwardResult{}, "unauthorized"
+	}
+
+	authCtx, authCancel := context.WithTimeout(ctx, s.authServiceTimeout)
+	defer authCancel()
+
+	alias, err := s.authClient.GetAliasForDomain(authCtx, authToken, domain)
 	if err != nil {
 		if errors.Is(err, authservice.ErrNoAliasForDomain) {
 			return GetForwardResult{Found: false}, ""
@@ -219,8 +247,9 @@ func (s *ForwardService) HandleGetForward(ctx context.Context, authToken, reques
 	}, ""
 }
 
-func parseUpdatedAt(s string) time.Time {
+func parseUpdatedAt(ctx context.Context, s string) time.Time {
 	if s == "" {
+		slog.WarnContext(ctx, "parseUpdatedAt: empty updated_at from forwardemail.net, using current time")
 		return time.Now().UTC()
 	}
 	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05.999Z07:00"} {
@@ -228,5 +257,6 @@ func parseUpdatedAt(s string) time.Time {
 			return t
 		}
 	}
+	slog.WarnContext(ctx, "parseUpdatedAt: failed to parse updated_at from forwardemail.net, using current time", "value", s)
 	return time.Now().UTC()
 }

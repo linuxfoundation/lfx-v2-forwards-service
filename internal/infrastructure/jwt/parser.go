@@ -9,7 +9,6 @@ package jwt
 import (
 	"context"
 	"crypto/rsa"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -172,91 +171,86 @@ func ExtractSubject(ctx context.Context, tokenString string) (string, error) {
 	return claims.Subject, nil
 }
 
-// Config holds a loaded JWKS public key and the expected issuer/audience.
+// Config holds a cached JWKS key set and the expected issuer/audience.
+// The key set includes all RSA signing keys from the Auth0 JWKS endpoint;
+// jwt.Parse selects the matching key by `kid` header automatically.
 type Config struct {
-	PublicKey        *rsa.PublicKey
+	keySet           jwk.Set
 	ExpectedIssuer   string
 	ExpectedAudience string
 }
 
 // NewConfigFromJWKS fetches the JWKS from the Auth0 domain and returns a Config.
+// Uses a dedicated HTTP client with a 10-second timeout to avoid hanging startup.
+// All RSA signing keys in the response are retained so that key rotation is tolerated.
 func NewConfigFromJWKS(ctx context.Context, auth0Domain, audience string) (*Config, error) {
 	jwksURL := fmt.Sprintf("https://%s/.well-known/jwks.json", auth0Domain)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build JWKS request: %w", err)
-	}
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	resp, err := http.DefaultClient.Do(req)
+	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+	if keySet.Len() == 0 {
+		return nil, fmt.Errorf("no keys found in JWKS at %s", jwksURL)
 	}
 
-	var jwks struct {
-		Keys []struct {
-			Kty string `json:"kty"`
-			Use string `json:"use,omitempty"`
-			Kid string `json:"kid,omitempty"`
-			Alg string `json:"alg,omitempty"`
-			N   string `json:"n"`
-			E   string `json:"e"`
-		} `json:"keys"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
-		return nil, fmt.Errorf("decode JWKS: %w", err)
+	expectedIssuer := fmt.Sprintf("https://%s/", auth0Domain)
+	if audience == "" {
+		audience = fmt.Sprintf("https://%s/api/v2/", auth0Domain)
 	}
 
-	for _, key := range jwks.Keys {
-		if key.Kty != "RSA" || (key.Use != "sig" && key.Use != "") {
-			continue
-		}
-		jwkData, err := json.Marshal(key)
-		if err != nil {
-			continue
-		}
-		pubKey, err := loadRSAPublicKeyFromJWK(jwkData)
-		if err != nil {
-			return nil, fmt.Errorf("load RSA public key from JWK: %w", err)
-		}
+	slog.InfoContext(ctx, "JWT verification configured",
+		"issuer", expectedIssuer,
+		"audience", audience,
+		"key_count", keySet.Len(),
+	)
 
-		expectedIssuer := fmt.Sprintf("https://%s/", auth0Domain)
-		if audience == "" {
-			audience = fmt.Sprintf("https://%s/api/v2/", auth0Domain)
-		}
-
-		slog.InfoContext(ctx, "JWT verification configured",
-			"issuer", expectedIssuer,
-			"audience", audience,
-			"key_id", key.Kid,
-		)
-
-		return &Config{
-			PublicKey:        pubKey,
-			ExpectedIssuer:   expectedIssuer,
-			ExpectedAudience: audience,
-		}, nil
-	}
-
-	return nil, fmt.Errorf("no suitable RSA signing key found in JWKS")
+	return &Config{
+		keySet:           keySet,
+		ExpectedIssuer:   expectedIssuer,
+		ExpectedAudience: audience,
+	}, nil
 }
 
 // Verify validates a JWT token using this Config and returns the claims.
+// Key selection is kid-aware: jwt.Parse matches the token's `kid` header against
+// the key set so that key rotation does not cause valid tokens to be rejected.
 func (c *Config) Verify(ctx context.Context, token string) (*Claims, error) {
-	return ParseVerified(ctx, token, &ParseOptions{
-		RequireExpiration: true,
-		AllowBearerPrefix: true,
-		RequireSubject:    true,
-		VerifySignature:   true,
-		SigningKey:        c.PublicKey,
-		ExpectedIssuer:    c.ExpectedIssuer,
-		ExpectedAudience:  c.ExpectedAudience,
-	})
+	cleanToken, err := cleanTokenString(token, true)
+	if err != nil {
+		return nil, err
+	}
+
+	tok, err := jwt.Parse([]byte(cleanToken), jwt.WithKeySet(c.keySet), jwt.WithValidate(true))
+	if err != nil {
+		return nil, fmt.Errorf("JWT signature verification failed: %w", err)
+	}
+
+	claims, err := extractClaimsFromJWT(tok)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.ExpectedIssuer != "" && claims.Issuer != c.ExpectedIssuer {
+		return nil, fmt.Errorf("invalid issuer %q, expected %q", claims.Issuer, c.ExpectedIssuer)
+	}
+	if c.ExpectedAudience != "" && claims.Audience != c.ExpectedAudience {
+		return nil, fmt.Errorf("invalid audience")
+	}
+	if strings.TrimSpace(claims.Subject) == "" {
+		return nil, fmt.Errorf("missing or invalid 'sub' claim in token")
+	}
+
+	slog.DebugContext(ctx, "JWT parsed and verified successfully",
+		"sub", claims.Subject,
+		"issuer", claims.Issuer,
+		"expires_at", claims.ExpiresAt,
+	)
+
+	return claims, nil
 }
 
 func cleanTokenString(tokenString string, allowBearer bool) (string, error) {
@@ -329,16 +323,4 @@ func validateScopes(claims *Claims, required []string) error {
 		}
 	}
 	return nil
-}
-
-func loadRSAPublicKeyFromJWK(jwkData []byte) (*rsa.PublicKey, error) {
-	key, err := jwk.ParseKey(jwkData)
-	if err != nil {
-		return nil, fmt.Errorf("parse JWK: %w", err)
-	}
-	var rsaKey rsa.PublicKey
-	if err := key.Raw(&rsaKey); err != nil {
-		return nil, fmt.Errorf("get RSA public key from JWK: %w", err)
-	}
-	return &rsaKey, nil
 }

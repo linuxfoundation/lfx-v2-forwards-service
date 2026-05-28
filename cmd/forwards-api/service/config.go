@@ -8,6 +8,7 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -114,9 +115,12 @@ func parseCSV(raw string) []string {
 
 func durationOr(key string, fallback time.Duration) time.Duration {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			slog.Warn("invalid duration env var, using default", "key", key, "value", v, "default", fallback)
+			return fallback
 		}
+		return d
 	}
 	return fallback
 }

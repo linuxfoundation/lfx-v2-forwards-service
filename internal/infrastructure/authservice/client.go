@@ -78,7 +78,11 @@ func (c *Client) GetAliasForDomain(ctx context.Context, authToken, domain string
 	}
 
 	if !reply.Success || reply.Error != "" {
-		return "", fmt.Errorf("auth-service error: %s", reply.Error)
+		msg := reply.Error
+		if msg == "" {
+			msg = "(no error detail returned)"
+		}
+		return "", fmt.Errorf("auth-service error: %s", msg)
 	}
 
 	if reply.Data == nil {

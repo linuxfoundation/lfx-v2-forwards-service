@@ -85,6 +85,7 @@ All request types require a `domain` field. Requests missing or sending an empty
 | `domain_not_allowed` | Requested domain is not in the service's configured domain list |
 | `unauthorized` | JWT missing, invalid, or auth-service call failed |
 | `not_found` | Caller has no alias identity on the requested domain |
+| `target_email_invalid` | `target_email` is missing or not a valid email address |
 | `forwardemail_error` | forwardemail.net API call failed |
 
 Full message contracts: [`pkg/api/forwards.go`](pkg/api/forwards.go).

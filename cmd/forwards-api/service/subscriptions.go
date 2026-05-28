@@ -52,7 +52,7 @@ func StartSubscriptions(ctx context.Context) ([]func(), error) {
 
 func subscribeCheckAlias(ctx context.Context) (func(), error) {
 	stop, err := NATSClient.QueueSubscribe(api.CheckAliasSubject, forwardsQueueGroup, func(msg *nats.Msg) {
-		msgCtx, cancel := context.WithTimeout(context.Background(), msgHandlerTimeout)
+		msgCtx, cancel := context.WithTimeout(ctx, msgHandlerTimeout)
 		defer cancel()
 
 		var req api.CheckAliasRequest
@@ -86,7 +86,7 @@ func subscribeCheckAlias(ctx context.Context) (func(), error) {
 
 func subscribeSetTarget(ctx context.Context) (func(), error) {
 	stop, err := NATSClient.QueueSubscribe(api.SetTargetSubject, forwardsQueueGroup, func(msg *nats.Msg) {
-		msgCtx, cancel := context.WithTimeout(context.Background(), msgHandlerTimeout)
+		msgCtx, cancel := context.WithTimeout(ctx, msgHandlerTimeout)
 		defer cancel()
 
 		var req api.SetTargetRequest
@@ -120,7 +120,7 @@ func subscribeSetTarget(ctx context.Context) (func(), error) {
 
 func subscribeGetForward(ctx context.Context) (func(), error) {
 	stop, err := NATSClient.QueueSubscribe(api.GetForwardSubject, forwardsQueueGroup, func(msg *nats.Msg) {
-		msgCtx, cancel := context.WithTimeout(context.Background(), msgHandlerTimeout)
+		msgCtx, cancel := context.WithTimeout(ctx, msgHandlerTimeout)
 		defer cancel()
 
 		var req api.GetForwardRequest

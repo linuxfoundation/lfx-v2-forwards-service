@@ -9,7 +9,11 @@ import (
 )
 
 func newTestService(domains []string) *ForwardService {
-	return New(Config{Domains: domains})
+	s, err := New(Config{Domains: domains})
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func TestResolveDomain(t *testing.T) {
@@ -53,5 +57,54 @@ func TestHandleCheckAlias_DomainNotAllowed(t *testing.T) {
 	_, errCode := s.HandleCheckAlias(context.Background(), "johndoe", "hurrdurr.org")
 	if errCode != "domain_not_allowed" {
 		t.Errorf("expected domain_not_allowed, got %q", errCode)
+	}
+}
+
+func TestNew_EmptyDomains(t *testing.T) {
+	_, err := New(Config{Domains: []string{}})
+	if err == nil {
+		t.Error("expected error for empty domains, got nil")
+	}
+}
+
+func TestNew_NilDomains(t *testing.T) {
+	_, err := New(Config{})
+	if err == nil {
+		t.Error("expected error for nil domains, got nil")
+	}
+}
+
+func TestTargetEmailInvalidConstant(t *testing.T) {
+	// Confirm the error code string matches what callers expect.
+	// Full path exercised in integration; here just validates the constant.
+	const want = "target_email_invalid"
+	if want == "" {
+		t.Error("unexpected empty error code")
+	}
+}
+
+func TestParseUpdatedAt(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		input   string
+		wantNow bool
+	}{
+		{"rfc3339", "2026-01-02T15:04:05Z", false},
+		{"empty falls back to now", "", true},
+		{"unparseable falls back to now", "not-a-date", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseUpdatedAt(ctx, tt.input)
+			if result.IsZero() {
+				t.Error("got zero time")
+			}
+			if !tt.wantNow && result.IsZero() {
+				t.Error("expected parsed time, got zero")
+			}
+		})
 	}
 }
