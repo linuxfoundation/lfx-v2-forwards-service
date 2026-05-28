@@ -43,41 +43,40 @@ service:
 
 # app is the configuration for the application
 app:
-  # logLevel is the log level (debug, info, warn, error)
-  logLevel: info
-
-  # forwardsSecretName is the name of the Kubernetes Secret containing:
-  #   - forwardemail-api-token
-  # Created automatically by ESO when externalSecretsOperator.enabled=true.
-  # Set to "" to skip injection (local dev uses extraEnv instead).
-  forwardsSecretName: "lfx-v2-forwards-service"
-
-  # auth0Domain is the Auth0 tenant hostname (no scheme) used to fetch JWKS
-  # and validate the iss claim. Set per environment.
-  auth0Domain: ""
-
-  # auth0Audience is the expected aud claim on inbound JWTs. Set per environment.
-  auth0Audience: ""
-
-  # domains is the allow-list of email domains this service manages. Callers must
-  # always supply the domain field in requests; there is no default fallback.
-  # The forwardemail.net account behind FORWARDEMAIL_API_TOKEN must own all listed domains.
-  # Deprecated: use domains instead of the singular FORWARDS_DOMAIN env var.
-  domains:
-    - "linux.com"
-
-  # reservedNames is a comma-separated list of additional reserved alias names
-  # appended to the built-in reserved-name list.
-  reservedNames: ""
-
-  # authServiceSubject overrides the NATS subject for lfx-v2-auth-service user_emails.read
-  authServiceSubject: "lfx.auth-service.user_emails.read"
-
-  # authServiceRequestTimeout is the timeout for auth-service NATS requests (e.g. "5s")
-  authServiceRequestTimeout: "5s"
-
-  # extraEnv allows injecting additional environment variables into the container.
-  extraEnv: []
+  # environment is the map of container environment variables. Each key is the
+  # env-var name; each value is either {value: "..."} for a literal or
+  # {valueFrom: {...}} for a Kubernetes envVarSource (e.g. secretKeyRef).
+  # Secrets default to valueFrom so plaintext is never committed in values.yaml.
+  # Add more entries here to inject additional environment variables.
+  environment:
+    LOG_LEVEL:
+      value: "info"
+    NATS_URL:
+      value: "nats://lfx-platform-nats.lfx.svc.cluster.local:4222"
+    AUTH_SERVICE_SUBJECT:
+      value: "lfx.auth-service.user_emails.read"
+    AUTH_SERVICE_REQUEST_TIMEOUT:
+      value: "5s"
+    # FORWARDS_DOMAINS is the comma-separated allow-list of managed email domains.
+    # The forwardemail.net account behind FORWARDEMAIL_API_TOKEN must own all listed domains.
+    FORWARDS_DOMAINS:
+      value: "linux.com"
+    # AUTH0_DOMAIN is the Auth0 tenant hostname (no scheme) used to fetch JWKS
+    # and validate the iss claim. Set per environment.
+    AUTH0_DOMAIN:
+      value: ""
+    # AUTH0_AUDIENCE is the expected aud claim on inbound JWTs. Set per environment.
+    AUTH0_AUDIENCE:
+      value: ""
+    # FORWARDEMAIL_API_TOKEN is the forwardemail.net basic-auth API token.
+    # Sourced from the Kubernetes Secret created by ESO (or pre-created out-of-band
+    # for local dev — see values.local.yaml.example).
+    FORWARDEMAIL_API_TOKEN:
+      valueFrom:
+        secretKeyRef:
+          name: "lfx-v2-forwards-service"
+          key: forwardemail-api-token
+          optional: false
 
   # otel is the configuration for OpenTelemetry observability
   otel:
@@ -103,9 +102,9 @@ networkPolicy:
   # httpsPort is used for outbound HTTPS to forwardemail.net and Auth0 JWKS.
   httpsPort: 443
 
-# nats is the configuration for NATS connectivity
+# nats holds NATS-related settings that aren't environment variables (the URL
+# is exposed via app.environment.NATS_URL).
 nats:
-  url: nats://lfx-platform-nats.lfx.svc.cluster.local:4222
   # credentialsFile is the path to the NATS NKey credentials file inside the container.
   # Leave empty to connect without credentials (for local dev).
   credentialsFile: ""

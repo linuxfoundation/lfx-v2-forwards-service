@@ -5,8 +5,21 @@
 # values.local.yaml is gitignored; this example file is the committed reference.
 #
 # Usage:
-#   cp values.local.yaml.example values.local.yaml
-#   helm upgrade --install ... -f values.yaml -f values.local.yaml
+#   1. Create the secret out-of-band (do NOT put it in values.local.yaml):
+#
+#        kubectl create secret generic lfx-v2-forwards-service \
+#          --namespace lfx \
+#          --from-literal=forwardemail-api-token=YOUR_TOKEN_HERE
+#
+#      The default values.yaml already references this secret via valueFrom,
+#      so the deployment will pick it up automatically. This chart does not
+#      generate the secret for you in local dev (ESO is disabled by default).
+#
+#   2. Copy and edit overrides:
+#        cp values.local.yaml.example values.local.yaml
+#
+#   3. Install:
+#        helm upgrade --install ... -f values.yaml -f values.local.yaml
 
 image:
   repository: ghcr.io/linuxfoundation/lfx-v2-forwards-service/forwards-api
@@ -16,23 +29,22 @@ image:
 replicaCount: 1
 
 app:
-  logLevel: debug
-  # forwardsSecretName: set to "" and use extraEnv for local dev
-  forwardsSecretName: ""
-  domains:
-    - "linux.com"
-  reservedNames: ""
-  authServiceSubject: "lfx.auth-service.user_emails.read"
-  authServiceRequestTimeout: "5s"
-
-  # extraEnv injects secrets for local dev (never commit real values)
-  extraEnv:
-    - name: FORWARDEMAIL_API_TOKEN
-      value: "change-me-local-dev-token"
-    - name: AUTH0_DOMAIN
+  # Only override env keys whose defaults you need to change for local dev.
+  # All other keys inherit from values.yaml.
+  environment:
+    LOG_LEVEL:
+      value: "debug"
+    AUTH0_DOMAIN:
       value: "your-dev-tenant.auth0.com"
-    - name: AUTH0_AUDIENCE
+    AUTH0_AUDIENCE:
       value: "https://your-dev-tenant.auth0.com/api/v2/"
+    # FORWARDEMAIL_API_TOKEN is already a valueFrom secretKeyRef in values.yaml.
+    # If your local secret has a different name/key, override here, e.g.:
+    # FORWARDEMAIL_API_TOKEN:
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: my-local-secret
+    #       key: token
 
   otel:
     serviceName: ""
@@ -46,5 +58,4 @@ app:
     propagators: "tracecontext,baggage,jaeger"
 
 nats:
-  url: nats://lfx-platform-nats.lfx.svc.cluster.local:4222
   credentialsFile: ""

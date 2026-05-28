@@ -42,39 +42,18 @@ spec:
               drop: ["ALL"]
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: NATS_URL
-              value: {{ .Values.nats.url }}
+            {{- range $name, $config := .Values.app.environment }}
+            - name: {{ $name }}
+              {{- if $config.valueFrom }}
+              valueFrom:
+                {{- toYaml $config.valueFrom | nindent 16 }}
+              {{- else }}
+              value: {{ $config.value | quote }}
+              {{- end }}
+            {{- end }}
             {{- if .Values.nats.credentialsFile }}
             - name: NATS_CREDENTIALS_FILE
               value: {{ .Values.nats.credentialsFile | quote }}
-            {{- end }}
-            {{- if .Values.app.forwardsSecretName }}
-            - name: FORWARDEMAIL_API_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.app.forwardsSecretName }}
-                  key: forwardemail-api-token
-                  optional: false
-            {{- end }}
-            - name: AUTH0_DOMAIN
-              value: {{ .Values.app.auth0Domain | quote }}
-            - name: AUTH0_AUDIENCE
-              value: {{ .Values.app.auth0Audience | quote }}
-            - name: FORWARDS_DOMAINS
-              value: {{ join "," .Values.app.domains | quote }}
-            {{- $reserved := .Values.app.reservedNames | toString | trim }}
-            {{- if ne $reserved "" }}
-            - name: FORWARDS_RESERVED_NAMES
-              value: {{ $reserved | quote }}
-            {{- end }}
-            - name: AUTH_SERVICE_SUBJECT
-              value: {{ .Values.app.authServiceSubject | quote }}
-            - name: AUTH_SERVICE_REQUEST_TIMEOUT
-              value: {{ .Values.app.authServiceRequestTimeout | quote }}
-            - name: LOG_LEVEL
-              value: {{ .Values.app.logLevel }}
-            {{- with .Values.app.extraEnv }}
-            {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- $otelServiceName := .Values.app.otel.serviceName | toString | trim }}
             {{- if ne $otelServiceName "" }}
