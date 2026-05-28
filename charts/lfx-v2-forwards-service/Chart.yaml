@@ -1,0 +1,8 @@
+# Copyright The Linux Foundation and each contributor to LFX.
+# SPDX-License-Identifier: MIT
+apiVersion: v2
+name: lfx-v2-forwards-service
+description: LFX Forwards Service — manages email alias forwarding via forwardemail.net
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

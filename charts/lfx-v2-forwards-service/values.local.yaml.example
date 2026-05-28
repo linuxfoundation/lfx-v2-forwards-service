@@ -1,0 +1,50 @@
+# Copyright The Linux Foundation and each contributor to LFX.
+# SPDX-License-Identifier: MIT
+
+# Local development overrides — copy this file to values.local.yaml and adjust as needed.
+# values.local.yaml is gitignored; this example file is the committed reference.
+#
+# Usage:
+#   cp values.local.yaml.example values.local.yaml
+#   helm upgrade --install ... -f values.yaml -f values.local.yaml
+
+image:
+  repository: ghcr.io/linuxfoundation/lfx-v2-forwards-service/forwards-api
+  tag: "latest"
+  pullPolicy: Never
+
+replicaCount: 1
+
+app:
+  logLevel: debug
+  # forwardsSecretName: set to "" and use extraEnv for local dev
+  forwardsSecretName: ""
+  domains:
+    - "linux.com"
+  reservedNames: ""
+  authServiceSubject: "lfx.auth-service.user_emails.read"
+  authServiceRequestTimeout: "5s"
+
+  # extraEnv injects secrets for local dev (never commit real values)
+  extraEnv:
+    - name: FORWARDEMAIL_API_TOKEN
+      value: "change-me-local-dev-token"
+    - name: AUTH0_DOMAIN
+      value: "your-dev-tenant.auth0.com"
+    - name: AUTH0_AUDIENCE
+      value: "https://your-dev-tenant.auth0.com/api/v2/"
+
+  otel:
+    serviceName: ""
+    protocol: "grpc"
+    endpoint: ""
+    insecure: "false"
+    tracesExporter: "none"
+    tracesSampleRatio: "1.0"
+    metricsExporter: "none"
+    logsExporter: "none"
+    propagators: "tracecontext,baggage,jaeger"
+
+nats:
+  url: nats://lfx-platform-nats.lfx.svc.cluster.local:4222
+  credentialsFile: ""

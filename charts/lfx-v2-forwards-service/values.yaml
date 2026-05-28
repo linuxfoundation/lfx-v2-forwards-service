@@ -1,0 +1,137 @@
+# Copyright The Linux Foundation and each contributor to LFX.
+# SPDX-License-Identifier: MIT
+
+# image is the configuration for the container image
+image:
+  # repository is the container image repository
+  repository: ghcr.io/linuxfoundation/lfx-v2-forwards-service/forwards-api
+  # tag is the container image tag (overrides appVersion from Chart.yaml)
+  tag: ""
+  # pullPolicy is the image pull policy
+  pullPolicy: IfNotPresent
+
+# replicaCount is the number of replicas for the deployment
+replicaCount: 1
+
+# podAnnotations are additional annotations applied to the pod template
+podAnnotations: {}
+
+# podLabels are additional labels applied to the pod template
+podLabels: {}
+
+# podDisruptionBudget configures a PodDisruptionBudget for the deployment.
+# Only one of minAvailable or maxUnavailable may be set.
+podDisruptionBudget:
+  # enabled controls whether a PodDisruptionBudget is created
+  enabled: false
+  # minAvailable: 1
+
+# resources is the configuration for container resource requests and limits
+resources:
+  limits:
+    cpu: 100m
+    memory: 64Mi
+  requests:
+    cpu: 25m
+    memory: 32Mi
+
+# service is the configuration for the Kubernetes Service.
+# enabled is false because the service has no HTTP server.
+service:
+  enabled: false
+  port: 8080
+
+# app is the configuration for the application
+app:
+  # logLevel is the log level (debug, info, warn, error)
+  logLevel: info
+
+  # forwardsSecretName is the name of the Kubernetes Secret containing:
+  #   - forwardemail-api-token
+  # Created automatically by ESO when externalSecretsOperator.enabled=true.
+  # Set to "" to skip injection (local dev uses extraEnv instead).
+  forwardsSecretName: "lfx-v2-forwards-service"
+
+  # auth0Domain is the Auth0 tenant hostname (no scheme) used to fetch JWKS
+  # and validate the iss claim. Set per environment.
+  auth0Domain: ""
+
+  # auth0Audience is the expected aud claim on inbound JWTs. Set per environment.
+  auth0Audience: ""
+
+  # domains is the allow-list of email domains this service manages. Callers must
+  # always supply the domain field in requests; there is no default fallback.
+  # The forwardemail.net account behind FORWARDEMAIL_API_TOKEN must own all listed domains.
+  # Deprecated: use domains instead of the singular FORWARDS_DOMAIN env var.
+  domains:
+    - "linux.com"
+
+  # reservedNames is a comma-separated list of additional reserved alias names
+  # appended to the built-in reserved-name list.
+  reservedNames: ""
+
+  # authServiceSubject overrides the NATS subject for lfx-v2-auth-service user_emails.read
+  authServiceSubject: "lfx.auth-service.user_emails.read"
+
+  # authServiceRequestTimeout is the timeout for auth-service NATS requests (e.g. "5s")
+  authServiceRequestTimeout: "5s"
+
+  # extraEnv allows injecting additional environment variables into the container.
+  extraEnv: []
+
+  # otel is the configuration for OpenTelemetry observability
+  otel:
+    serviceName: ""
+    protocol: "grpc"
+    endpoint: ""
+    insecure: "false"
+    tracesExporter: "none"
+    tracesSampleRatio: "1.0"
+    metricsExporter: "none"
+    logsExporter: "none"
+    propagators: "tracecontext,baggage,jaeger"
+
+# networkPolicy controls the Kubernetes NetworkPolicy for this workload.
+networkPolicy:
+  enabled: true
+  # natsPort is the TCP port of the NATS broker.
+  natsPort: 4222
+  # otelGRPCPort is the gRPC port of the OpenTelemetry collector.
+  otelGRPCPort: 4317
+  # otelHTTPPort is the HTTP port of the OpenTelemetry collector.
+  otelHTTPPort: 4318
+  # httpsPort is used for outbound HTTPS to forwardemail.net and Auth0 JWKS.
+  httpsPort: 443
+
+# nats is the configuration for NATS connectivity
+nats:
+  url: nats://lfx-platform-nats.lfx.svc.cluster.local:4222
+  # credentialsFile is the path to the NATS NKey credentials file inside the container.
+  # Leave empty to connect without credentials (for local dev).
+  credentialsFile: ""
+
+# serviceAccount is the configuration for the Kubernetes ServiceAccount
+serviceAccount:
+  create: true
+  name: "lfx-v2-forwards-service"
+  # annotations are used to attach an EKS IRSA role ARN for ESO:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role-name>
+  annotations: {}
+
+# global is configuration shared across chart dependencies
+global:
+  # awsRegion is the AWS region used by the External Secrets Operator SecretStore.
+  awsRegion: ""
+
+# externalSecretsOperator configures ESO integration for pulling secrets
+# from AWS Secrets Manager into a Kubernetes Secret.
+externalSecretsOperator:
+  enabled: false
+  externalSecret:
+    refreshInterval: "10m"
+    # data maps AWS Secrets Manager fields to Kubernetes Secret keys
+    data:
+      - secretKey: forwardemail-api-token # checkov:skip=CKV_SECRET_6 not a base64 value
+        remoteRef:
+          key: /cloudops/managed-secrets/cloud/forwards-service/forwardemail
+          property: api_token

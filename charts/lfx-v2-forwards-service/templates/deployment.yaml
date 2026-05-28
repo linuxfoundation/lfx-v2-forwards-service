@@ -1,0 +1,111 @@
+# Copyright The Linux Foundation and each contributor to LFX.
+# SPDX-License-Identifier: MIT
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ .Chart.Name }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NATS_URL
+              value: {{ .Values.nats.url }}
+            {{- if .Values.nats.credentialsFile }}
+            - name: NATS_CREDENTIALS_FILE
+              value: {{ .Values.nats.credentialsFile | quote }}
+            {{- end }}
+            {{- if .Values.app.forwardsSecretName }}
+            - name: FORWARDEMAIL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.forwardsSecretName }}
+                  key: forwardemail-api-token
+                  optional: false
+            {{- end }}
+            - name: AUTH0_DOMAIN
+              value: {{ .Values.app.auth0Domain | quote }}
+            - name: AUTH0_AUDIENCE
+              value: {{ .Values.app.auth0Audience | quote }}
+            - name: FORWARDS_DOMAINS
+              value: {{ join "," .Values.app.domains | quote }}
+            {{- $reserved := .Values.app.reservedNames | toString | trim }}
+            {{- if ne $reserved "" }}
+            - name: FORWARDS_RESERVED_NAMES
+              value: {{ $reserved | quote }}
+            {{- end }}
+            - name: AUTH_SERVICE_SUBJECT
+              value: {{ .Values.app.authServiceSubject | quote }}
+            - name: AUTH_SERVICE_REQUEST_TIMEOUT
+              value: {{ .Values.app.authServiceRequestTimeout | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.app.logLevel }}
+            {{- with .Values.app.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- $otelServiceName := .Values.app.otel.serviceName | toString | trim }}
+            {{- if ne $otelServiceName "" }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ $otelServiceName | quote }}
+            {{- end }}
+            {{- $otelEndpoint := .Values.app.otel.endpoint | toString | trim }}
+            {{- if ne $otelEndpoint "" }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ $otelEndpoint | quote }}
+            {{- end }}
+            {{- $otelProtocol := .Values.app.otel.protocol | toString | trim }}
+            {{- if ne $otelProtocol "" }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ $otelProtocol | quote }}
+            {{- end }}
+            {{- $otelInsecure := .Values.app.otel.insecure | toString | trim }}
+            {{- if ne $otelInsecure "" }}
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: {{ $otelInsecure | quote }}
+            {{- end }}
+            {{- $otelTracesExporter := .Values.app.otel.tracesExporter | toString | trim }}
+            {{- if ne $otelTracesExporter "" }}
+            - name: OTEL_TRACES_EXPORTER
+              value: {{ $otelTracesExporter | quote }}
+            {{- end }}
+            {{- $otelPropagators := .Values.app.otel.propagators | toString | trim }}
+            {{- if ne $otelPropagators "" }}
+            - name: OTEL_PROPAGATORS
+              value: {{ $otelPropagators | quote }}
+            {{- end }}
+          # livenessProbe and readinessProbe are omitted — the service has no HTTP server.
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
