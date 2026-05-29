@@ -24,7 +24,7 @@ type AppConfig struct {
 	ForwardEmailAPIToken string
 	ForwardEmailBaseURL  string
 
-	// Domain configuration — index 0 is the default domain for requests that omit domain.
+	// Domain configuration — the allow-list of email domains this service manages.
 	ForwardsDomains       []string
 	ForwardsReservedNames []string
 
