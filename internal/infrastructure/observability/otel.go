@@ -111,7 +111,7 @@ func OTelConfigFromEnv(ctx context.Context) OTelConfig {
 					"provided-value", ratio)
 			}
 		} else {
-			slog.Warn("invalid OTEL_TRACES_SAMPLE_RATIO value, using default 1.0",
+			slog.WarnContext(ctx, "invalid OTEL_TRACES_SAMPLE_RATIO value, using default 1.0",
 				"provided-value", ratio, "error", err)
 		}
 	}

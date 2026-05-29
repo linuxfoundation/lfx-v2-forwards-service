@@ -16,7 +16,7 @@ type ctxKey string
 
 const (
 	slogFields      ctxKey = "slog_fields"
-	logLevelDefault        = slog.LevelDebug
+	logLevelDefault        = slog.LevelInfo
 	debug                  = "debug"
 	warn                   = "warn"
 	info                   = "info"
@@ -62,7 +62,7 @@ func AppendCtx(parent context.Context, attr slog.Attr) context.Context {
 }
 
 // InitStructureLogConfig initializes the structured log configuration.
-// logLevel should be "debug", "info", "warn", "error", or "" for the default (debug).
+// logLevel should be "debug", "info", "warn", "error", or "" for the default (info).
 // Call with "" during init() for early startup logging, then call again after
 // AppConfigFromEnv() to apply the configured level.
 func InitStructureLogConfig(logLevel string) {
