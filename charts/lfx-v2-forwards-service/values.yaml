@@ -133,4 +133,4 @@ externalSecretsOperator:
       - secretKey: forwardemail-api-token # checkov:skip=CKV_SECRET_6 not a base64 value
         remoteRef:
           key: /cloudops/managed-secrets/cloud/forwards-service/forwardemail
-          property: api_token
+          property: forwardemail_api_token
