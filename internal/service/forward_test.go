@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func newTestService(domains []string) *ForwardService {
@@ -74,37 +75,31 @@ func TestNew_NilDomains(t *testing.T) {
 	}
 }
 
-func TestTargetEmailInvalidConstant(t *testing.T) {
-	// Confirm the error code string matches what callers expect.
-	// Full path exercised in integration; here just validates the constant.
-	const want = "target_email_invalid"
-	if want == "" {
-		t.Error("unexpected empty error code")
-	}
-}
-
 func TestParseUpdatedAt(t *testing.T) {
 	ctx := context.Background()
+	const rfc3339Input = "2026-01-02T15:04:05Z"
+	expected, _ := time.Parse(time.RFC3339, rfc3339Input)
 
-	tests := []struct {
-		name    string
-		input   string
-		wantNow bool
-	}{
-		{"rfc3339", "2026-01-02T15:04:05Z", false},
-		{"empty falls back to now", "", true},
-		{"unparseable falls back to now", "not-a-date", true},
-	}
+	t.Run("rfc3339 parses to exact value", func(t *testing.T) {
+		result := parseUpdatedAt(ctx, rfc3339Input)
+		if !result.Equal(expected) {
+			t.Errorf("got %v, want %v", result, expected)
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseUpdatedAt(ctx, tt.input)
-			if result.IsZero() {
-				t.Error("got zero time")
-			}
-			if !tt.wantNow && result.IsZero() {
-				t.Error("expected parsed time, got zero")
-			}
-		})
-	}
+	t.Run("empty falls back to near-now", func(t *testing.T) {
+		before := time.Now()
+		result := parseUpdatedAt(ctx, "")
+		if result.Before(before) || time.Since(result) > 5*time.Second {
+			t.Errorf("expected time close to now, got %v", result)
+		}
+	})
+
+	t.Run("unparseable falls back to near-now", func(t *testing.T) {
+		before := time.Now()
+		result := parseUpdatedAt(ctx, "not-a-date")
+		if result.Before(before) || time.Since(result) > 5*time.Second {
+			t.Errorf("expected time close to now, got %v", result)
+		}
+	})
 }

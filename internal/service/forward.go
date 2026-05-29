@@ -119,17 +119,12 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 	}
 
 	// Verify JWT signature locally (defense in depth); auth-service re-validates below.
-	if _, err := s.jwtCfg.Verify(ctx, authToken); err != nil {
+	claims, err := s.jwtCfg.Verify(ctx, authToken)
+	if err != nil {
 		slog.WarnContext(ctx, "set_target: JWT verification failed", "error", err)
 		return SetTargetResult{}, "unauthorized"
 	}
-
-	// Extract sub locally for the lfid: label (auth-service also validates the JWT).
-	sub, err := jwtpkg.ExtractSubject(ctx, authToken)
-	if err != nil {
-		slog.WarnContext(ctx, "set_target: JWT parse failed", "error", err)
-		return SetTargetResult{}, "unauthorized"
-	}
+	sub := claims.Subject
 
 	authCtx, authCancel := context.WithTimeout(ctx, s.authServiceTimeout)
 	defer authCancel()

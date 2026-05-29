@@ -35,7 +35,8 @@ func main() {
 }
 
 func run() error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	otelConfig := observability.OTelConfigFromEnv(ctx)
 	if otelConfig.ServiceVersion == "" {
@@ -82,10 +83,8 @@ func run() error {
 
 	slog.InfoContext(ctx, "forwards service ready")
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-quit
+	<-ctx.Done()
 
-	slog.InfoContext(ctx, "received shutdown signal, stopping", "signal", sig.String())
+	slog.InfoContext(ctx, "received shutdown signal, stopping")
 	return nil
 }

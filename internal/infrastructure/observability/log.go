@@ -36,6 +36,14 @@ func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handler.Handle(ctx, r)
 }
 
+func (h contextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return contextHandler{Handler: h.Handler.WithAttrs(attrs)}
+}
+
+func (h contextHandler) WithGroup(name string) slog.Handler {
+	return contextHandler{Handler: h.Handler.WithGroup(name)}
+}
+
 // AppendCtx attaches an slog.Attr to ctx so it will be included on every
 // Record emitted with that context (via the package's contextHandler). Use
 // this from handlers to thread request-scoped fields (e.g. alias, sub)

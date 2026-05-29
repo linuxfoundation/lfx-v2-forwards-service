@@ -103,7 +103,7 @@ func subscribeSetTarget(ctx context.Context) (func(), error) {
 		} else {
 			resp.Alias = result.Alias
 			resp.TargetEmail = result.TargetEmail
-			resp.UpdatedAt = result.UpdatedAt
+			resp.UpdatedAt = &result.UpdatedAt
 		}
 
 		replyJSON(msgCtx, msg, resp)

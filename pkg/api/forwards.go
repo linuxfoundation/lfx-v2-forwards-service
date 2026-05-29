@@ -51,10 +51,10 @@ type SetTargetRequest struct {
 
 // SetTargetReply is the reply payload for SetTargetSubject.
 type SetTargetReply struct {
-	Alias       string    `json:"alias,omitempty"`
-	TargetEmail string    `json:"target_email,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at,omitempty"`
-	Error       string    `json:"error,omitempty"`
+	Alias       string     `json:"alias,omitempty"`
+	TargetEmail string     `json:"target_email,omitempty"`
+	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
+	Error       string     `json:"error,omitempty"`
 }
 
 // GetForwardRequest is the payload for GetForwardSubject.
