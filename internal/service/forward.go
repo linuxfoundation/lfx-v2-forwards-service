@@ -13,7 +13,6 @@ import (
 	"time"
 
 	femail "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/forwardemail"
-	jwtpkg "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/jwt"
 
 	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/port"
@@ -22,7 +21,7 @@ import (
 
 // ForwardService implements the business logic for the forwards service.
 type ForwardService struct {
-	jwtCfg             *jwtpkg.Config
+	jwtCfg             port.TokenVerifier
 	authClient         port.AuthServiceClient
 	feClient           port.ForwardEmailProvider
 	domains            []string
@@ -32,7 +31,7 @@ type ForwardService struct {
 
 // Config holds the dependencies and settings for ForwardService.
 type Config struct {
-	JWTConfig          *jwtpkg.Config
+	JWTConfig          port.TokenVerifier
 	AuthClient         port.AuthServiceClient
 	FEmailClient       port.ForwardEmailProvider
 	Domains            []string
@@ -44,6 +43,9 @@ type Config struct {
 func New(cfg Config) (*ForwardService, error) {
 	if len(cfg.Domains) == 0 {
 		return nil, fmt.Errorf("ForwardService requires at least one configured domain")
+	}
+	if cfg.JWTConfig == nil {
+		return nil, fmt.Errorf("ForwardService requires a non-nil JWTConfig")
 	}
 	timeout := cfg.AuthServiceTimeout
 	if timeout <= 0 {

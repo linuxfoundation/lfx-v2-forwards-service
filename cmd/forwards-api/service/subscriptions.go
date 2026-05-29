@@ -73,7 +73,7 @@ func subscribeCheckAlias(ctx context.Context) (func(), error) {
 
 		replyJSON(msgCtx, msg, resp)
 		slog.InfoContext(msgCtx, "check_alias reply sent",
-			"alias", req.Alias,
+			"alias", resp.Alias,
 			"exists", resp.Exists,
 			"error", resp.Error,
 		)

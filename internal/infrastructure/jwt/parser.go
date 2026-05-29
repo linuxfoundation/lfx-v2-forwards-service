@@ -180,22 +180,44 @@ type Config struct {
 	ExpectedAudience string
 }
 
+// jwksMinRefreshInterval bounds how often the background cache may re-fetch the JWKS,
+// even if the endpoint advertises a shorter Cache-Control max-age.
+const jwksMinRefreshInterval = 15 * time.Minute
+
 // NewConfigFromJWKS fetches the JWKS from the Auth0 domain and returns a Config.
 // Uses a dedicated HTTP client with a 10-second timeout to avoid hanging startup.
 // All RSA signing keys in the response are retained so that key rotation is tolerated.
+//
+// The key set is backed by a jwk.Cache that refreshes in the background (honouring the
+// JWKS endpoint's Cache-Control header, bounded by jwksMinRefreshInterval). This means an
+// out-of-band Auth0 key rotation — e.g. retiring a compromised signing key — is picked up
+// without a pod restart. The background refresh goroutine is bound to ctx, so it stops when
+// ctx is cancelled (process shutdown). ctx must therefore be process-lifetime, not per-request.
 func NewConfigFromJWKS(ctx context.Context, auth0Domain, audience string) (*Config, error) {
 	jwksURL := fmt.Sprintf("https://%s/.well-known/jwks.json", auth0Domain)
 
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(httpClient))
+	cache := jwk.NewCache(ctx)
+	if err := cache.Register(jwksURL,
+		jwk.WithHTTPClient(httpClient),
+		jwk.WithMinRefreshInterval(jwksMinRefreshInterval),
+	); err != nil {
+		return nil, fmt.Errorf("register JWKS cache: %w", err)
+	}
+
+	// Perform the initial fetch synchronously so startup fails fast if the JWKS is
+	// unreachable or empty, preserving the previous fail-on-startup behaviour.
+	initial, err := cache.Refresh(ctx, jwksURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
-
-	if keySet.Len() == 0 {
+	if initial.Len() == 0 {
 		return nil, fmt.Errorf("no keys found in JWKS at %s", jwksURL)
 	}
+
+	// keySet is a view over the cache that always reflects the latest background refresh.
+	keySet := jwk.NewCachedSet(cache, jwksURL)
 
 	expectedIssuer := fmt.Sprintf("https://%s/", auth0Domain)
 	if audience == "" {
@@ -205,7 +227,7 @@ func NewConfigFromJWKS(ctx context.Context, auth0Domain, audience string) (*Conf
 	slog.InfoContext(ctx, "JWT verification configured",
 		"issuer", expectedIssuer,
 		"audience", audience,
-		"key_count", keySet.Len(),
+		"key_count", initial.Len(),
 	)
 
 	return &Config{
@@ -224,6 +246,10 @@ func (c *Config) Verify(ctx context.Context, token string) (*Claims, error) {
 		return nil, err
 	}
 
+	// WithKeySet restricts the accepted signature algorithm to the key types present in
+	// the Auth0 JWKS, which contains only RSA signing keys (RS256). This is the implicit
+	// equivalent of the explicit jwa.RS256 pin used in ParseVerified above — an attacker
+	// cannot downgrade to "alg":"none" or an HMAC algorithm, because no matching key exists.
 	tok, err := jwt.Parse([]byte(cleanToken), jwt.WithKeySet(c.keySet), jwt.WithValidate(true))
 	if err != nil {
 		return nil, fmt.Errorf("JWT signature verification failed: %w", err)
