@@ -90,8 +90,17 @@ func (c *Client) GetAliasForDomain(ctx context.Context, authToken, domain string
 	}
 
 	suffix := "@" + strings.ToLower(strings.TrimSpace(domain))
+
+	// Match against alternate emails first, then the primary email — the caller's
+	// managed-domain identity may be recorded by auth-service in either field.
+	candidates := make([]string, 0, len(reply.Data.AlternateEmails)+1)
 	for _, e := range reply.Data.AlternateEmails {
-		lower := strings.ToLower(strings.TrimSpace(e.Email))
+		candidates = append(candidates, e.Email)
+	}
+	candidates = append(candidates, reply.Data.PrimaryEmail)
+
+	for _, email := range candidates {
+		lower := strings.ToLower(strings.TrimSpace(email))
 		if strings.HasSuffix(lower, suffix) {
 			localPart := strings.TrimSuffix(lower, suffix)
 			if localPart != "" {

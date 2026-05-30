@@ -35,12 +35,6 @@ resources:
     cpu: 25m
     memory: 32Mi
 
-# service is the configuration for the Kubernetes Service.
-# enabled is false because the service has no HTTP server.
-service:
-  enabled: false
-  port: 8080
-
 # app is the configuration for the application
 app:
   # environment is the map of container environment variables. Each key is the
@@ -58,9 +52,10 @@ app:
     AUTH_SERVICE_REQUEST_TIMEOUT:
       value: "5s"
     # FORWARDS_DOMAINS is the comma-separated allow-list of managed email domains.
-    # The forwardemail.net account behind FORWARDEMAIL_API_TOKEN must own all listed domains.
+    # The forwardemail.net account behind FORWARDEMAIL_API_TOKEN must own all listed
+    # domains. Required — set per environment; startup fails if unset.
     FORWARDS_DOMAINS:
-      value: "linux.com"
+      value: ""
     # AUTH0_DOMAIN is the Auth0 tenant hostname (no scheme) used to fetch JWKS
     # and validate the iss claim. Set per environment.
     AUTH0_DOMAIN:

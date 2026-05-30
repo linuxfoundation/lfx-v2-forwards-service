@@ -157,7 +157,7 @@ func SetupOTelSDKWithConfig(ctx context.Context, cfg OTelConfig) (shutdown func(
 		return
 	}
 
-	otel.SetTextMapPropagator(newPropagator(cfg))
+	otel.SetTextMapPropagator(newPropagator(ctx, cfg))
 
 	if cfg.TracesExporter != otelExporterNone {
 		var tracerProvider *trace.TracerProvider
@@ -206,7 +206,7 @@ func newResource(cfg OTelConfig) (*resource.Resource, error) {
 	)
 }
 
-func newPropagator(cfg OTelConfig) propagation.TextMapPropagator {
+func newPropagator(ctx context.Context, cfg OTelConfig) propagation.TextMapPropagator {
 	var propagators []propagation.TextMapPropagator
 
 	for p := range strings.SplitSeq(cfg.Propagators, ",") {
@@ -218,7 +218,7 @@ func newPropagator(cfg OTelConfig) propagation.TextMapPropagator {
 		case "jaeger":
 			propagators = append(propagators, jaeger.Jaeger{})
 		default:
-			slog.Warn("unknown propagator, skipping", "propagator", p)
+			slog.WarnContext(ctx, "unknown propagator, skipping", "propagator", p)
 		}
 	}
 

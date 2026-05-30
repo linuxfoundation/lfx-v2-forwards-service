@@ -100,7 +100,7 @@ Full message contracts: [`pkg/api/forwards.go`](pkg/api/forwards.go).
 | `NATS_CREDENTIALS_FILE` | No | `""` | NKey credentials file path |
 | `FORWARDEMAIL_API_TOKEN` | Yes | — | forwardemail.net basic-auth API token |
 | `FORWARDEMAIL_BASE_URL` | No | `https://api.forwardemail.net` | Override for testing |
-| `FORWARDS_DOMAINS` | No | `linux.com` | Comma-separated allow-list of managed domains. Callers must always send `domain` explicitly. |
+| `FORWARDS_DOMAINS` | Yes | — | Comma-separated allow-list of managed domains. Callers must always send `domain` explicitly. |
 | `FORWARDS_RESERVED_NAMES` | No | `""` | Comma-separated extra reserved alias names |
 | `AUTH0_DOMAIN` | Yes | — | Auth0 tenant hostname for JWKS fetch (e.g. `linuxfoundation-dev.auth0.com`) |
 | `AUTH0_AUDIENCE` | Yes | — | Expected JWT audience |

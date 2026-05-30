@@ -50,7 +50,7 @@ func AppConfigFromEnv() (AppConfig, error) {
 		ForwardEmailAPIToken: os.Getenv("FORWARDEMAIL_API_TOKEN"),
 		ForwardEmailBaseURL:  os.Getenv("FORWARDEMAIL_BASE_URL"),
 
-		ForwardsDomains:       forwardsDomains(),
+		ForwardsDomains:       parseCSV(os.Getenv("FORWARDS_DOMAINS")),
 		ForwardsReservedNames: parseCSV(os.Getenv("FORWARDS_RESERVED_NAMES")),
 
 		Auth0Domain:   os.Getenv("AUTH0_DOMAIN"),
@@ -66,6 +66,9 @@ func AppConfigFromEnv() (AppConfig, error) {
 	if cfg.ForwardEmailAPIToken == "" {
 		missing = append(missing, "FORWARDEMAIL_API_TOKEN")
 	}
+	if len(cfg.ForwardsDomains) == 0 {
+		missing = append(missing, "FORWARDS_DOMAINS")
+	}
 	if cfg.Auth0Domain == "" {
 		missing = append(missing, "AUTH0_DOMAIN")
 	}
@@ -77,19 +80,6 @@ func AppConfigFromEnv() (AppConfig, error) {
 	}
 
 	return cfg, nil
-}
-
-// forwardsDomains reads FORWARDS_DOMAINS (CSV) with a fallback to the deprecated
-// singular FORWARDS_DOMAIN. Defaults to ["linux.com"] when neither is set.
-func forwardsDomains() []string {
-	if v := os.Getenv("FORWARDS_DOMAINS"); strings.TrimSpace(v) != "" {
-		return parseCSV(v)
-	}
-	// deprecated singular fallback
-	if v := strings.TrimSpace(os.Getenv("FORWARDS_DOMAIN")); v != "" {
-		return []string{v}
-	}
-	return []string{"linux.com"}
 }
 
 func envOr(key, fallback string) string {

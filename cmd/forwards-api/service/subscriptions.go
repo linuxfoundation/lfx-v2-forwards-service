@@ -23,29 +23,36 @@ const (
 )
 
 // StartSubscriptions binds all NATS subscribers and returns their stop functions.
+// On a partial failure it unwinds any subscriptions already registered before
+// returning the error, so a failed startup leaves no dangling subscriptions.
 func StartSubscriptions(ctx context.Context) ([]func(), error) {
 	stops := make([]func(), 0, 3)
 
-	stop, err := subscribeCheckAlias(ctx)
-	if err != nil {
-		return nil, err
+	// stopAll unwinds the subscriptions registered so far. Used on partial failure.
+	stopAll := func() {
+		for _, stop := range stops {
+			stop()
+		}
 	}
-	stops = append(stops, stop)
-	slog.InfoContext(ctx, "subscription started", "subject", api.CheckAliasSubject)
 
-	stop, err = subscribeSetTarget(ctx)
-	if err != nil {
-		return nil, err
+	subscribers := []struct {
+		subject string
+		bind    func(context.Context) (func(), error)
+	}{
+		{api.CheckAliasSubject, subscribeCheckAlias},
+		{api.SetTargetSubject, subscribeSetTarget},
+		{api.GetForwardSubject, subscribeGetForward},
 	}
-	stops = append(stops, stop)
-	slog.InfoContext(ctx, "subscription started", "subject", api.SetTargetSubject)
 
-	stop, err = subscribeGetForward(ctx)
-	if err != nil {
-		return nil, err
+	for _, s := range subscribers {
+		stop, err := s.bind(ctx)
+		if err != nil {
+			stopAll()
+			return nil, err
+		}
+		stops = append(stops, stop)
+		slog.InfoContext(ctx, "subscription started", "subject", s.subject)
 	}
-	stops = append(stops, stop)
-	slog.InfoContext(ctx, "subscription started", "subject", api.GetForwardSubject)
 
 	return stops, nil
 }
