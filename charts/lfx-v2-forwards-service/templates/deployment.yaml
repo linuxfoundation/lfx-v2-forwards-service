@@ -1,0 +1,90 @@
+# Copyright The Linux Foundation and each contributor to LFX.
+# SPDX-License-Identifier: MIT
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ .Chart.Name }}
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- range $name, $config := .Values.app.environment }}
+            - name: {{ $name }}
+              {{- if $config.valueFrom }}
+              valueFrom:
+                {{- toYaml $config.valueFrom | nindent 16 }}
+              {{- else }}
+              value: {{ $config.value | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if .Values.nats.credentialsFile }}
+            - name: NATS_CREDENTIALS_FILE
+              value: {{ .Values.nats.credentialsFile | quote }}
+            {{- end }}
+            {{- $otelServiceName := .Values.app.otel.serviceName | toString | trim }}
+            {{- if ne $otelServiceName "" }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ $otelServiceName | quote }}
+            {{- end }}
+            {{- $otelEndpoint := .Values.app.otel.endpoint | toString | trim }}
+            {{- if ne $otelEndpoint "" }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ $otelEndpoint | quote }}
+            {{- end }}
+            {{- $otelProtocol := .Values.app.otel.protocol | toString | trim }}
+            {{- if ne $otelProtocol "" }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ $otelProtocol | quote }}
+            {{- end }}
+            {{- $otelInsecure := .Values.app.otel.insecure | toString | trim }}
+            {{- if ne $otelInsecure "" }}
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: {{ $otelInsecure | quote }}
+            {{- end }}
+            {{- $otelTracesExporter := .Values.app.otel.tracesExporter | toString | trim }}
+            {{- if ne $otelTracesExporter "" }}
+            - name: OTEL_TRACES_EXPORTER
+              value: {{ $otelTracesExporter | quote }}
+            {{- end }}
+            {{- $otelPropagators := .Values.app.otel.propagators | toString | trim }}
+            {{- if ne $otelPropagators "" }}
+            - name: OTEL_PROPAGATORS
+              value: {{ $otelPropagators | quote }}
+            {{- end }}
+          # livenessProbe and readinessProbe are omitted — the service has no HTTP server.
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
