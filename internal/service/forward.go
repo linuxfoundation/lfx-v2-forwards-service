@@ -12,11 +12,8 @@ import (
 	"strings"
 	"time"
 
-	femail "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/forwardemail"
-
 	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/port"
-	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/authservice"
 )
 
 // ForwardService implements the business logic for the forwards service.
@@ -114,6 +111,11 @@ type SetTargetResult struct {
 
 // HandleSetTarget creates or updates the forwarding routing for the caller's alias on the given domain.
 // Returns errCode "unauthorized", "not_found", "target_email_invalid", "domain_required", "domain_not_allowed", or "forwardemail_error" on failure.
+//
+// The existence check and create/update are not atomic: two concurrent first-writes for
+// the same alias can both observe exists=false and race to create it. forwardemail.net is
+// the authoritative store, so the loser receives a conflict mapped to "forwardemail_error";
+// the caller's retry then succeeds via the update path. No distributed lock is used.
 func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, requestedDomain, targetEmail string) (SetTargetResult, string) {
 	domain, errCode := s.resolveDomain(requestedDomain)
 	if errCode != "" {
@@ -133,7 +135,7 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 
 	alias, err := s.authClient.GetAliasForDomain(authCtx, authToken, domain)
 	if err != nil {
-		if errors.Is(err, authservice.ErrNoAliasForDomain) {
+		if errors.Is(err, model.ErrNoAliasForDomain) {
 			return SetTargetResult{}, "not_found"
 		}
 		slog.ErrorContext(ctx, "set_target: auth-service error", "error", err)
@@ -157,7 +159,7 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 	var updatedAt time.Time
 
 	if !exists {
-		created, err := s.feClient.CreateAlias(ctx, domain, &femail.CreateAliasRequest{
+		created, err := s.feClient.CreateAlias(ctx, domain, &model.CreateAliasRequest{
 			Name:       alias,
 			Recipients: []string{targetEmail},
 			Labels:     []string{fmt.Sprintf("lfid:%s", sub)},
@@ -170,7 +172,7 @@ func (s *ForwardService) HandleSetTarget(ctx context.Context, authToken, request
 		updatedAt = parseUpdatedAt(ctx, created.UpdatedAt)
 		slog.InfoContext(ctx, "set_target: alias created", "alias", alias, "domain", domain)
 	} else {
-		updated, err := s.feClient.UpdateAlias(ctx, domain, alias, &femail.UpdateAliasRequest{
+		updated, err := s.feClient.UpdateAlias(ctx, domain, alias, &model.UpdateAliasRequest{
 			Recipients: []string{targetEmail},
 			IsEnabled:  true,
 		})
@@ -216,7 +218,7 @@ func (s *ForwardService) HandleGetForward(ctx context.Context, authToken, reques
 
 	alias, err := s.authClient.GetAliasForDomain(authCtx, authToken, domain)
 	if err != nil {
-		if errors.Is(err, authservice.ErrNoAliasForDomain) {
+		if errors.Is(err, model.ErrNoAliasForDomain) {
 			return GetForwardResult{Found: false}, ""
 		}
 		slog.ErrorContext(ctx, "get_forward: auth-service error", "error", err)
@@ -225,7 +227,7 @@ func (s *ForwardService) HandleGetForward(ctx context.Context, authToken, reques
 
 	aliasObj, err := s.feClient.GetAlias(ctx, domain, alias)
 	if err != nil {
-		if errors.Is(err, femail.ErrNotFound) {
+		if errors.Is(err, model.ErrAliasNotFound) {
 			return GetForwardResult{Found: false}, ""
 		}
 		slog.ErrorContext(ctx, "get_forward: forwardemail error", "alias", alias, "error", err)

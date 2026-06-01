@@ -8,7 +8,7 @@ import "context"
 // AuthServiceClient is the port for calling lfx-v2-auth-service.
 type AuthServiceClient interface {
 	// GetAliasForDomain returns the alias local part (e.g. "johndoe") for the user
-	// identified by authToken on the given domain. Returns authservice.ErrNoAliasForDomain
+	// identified by authToken on the given domain. Returns model.ErrNoAliasForDomain
 	// if the user has no identity for that domain.
 	GetAliasForDomain(ctx context.Context, authToken, domain string) (string, error)
 }

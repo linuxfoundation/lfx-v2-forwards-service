@@ -5,12 +5,12 @@ package forwardemail_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 	femail "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/forwardemail"
 )
 
@@ -18,16 +18,23 @@ func newTestClient(srv *httptest.Server) *femail.Client {
 	return femail.New("test-token", srv.URL)
 }
 
+// assertBasicAuth fails the test if the request does not carry the expected API
+// token as the Basic-auth username, guarding against the client ever dropping it.
+func assertBasicAuth(t *testing.T, r *http.Request) {
+	t.Helper()
+	if user, _, ok := r.BasicAuth(); !ok || user != "test-token" {
+		t.Errorf("expected Basic auth with token, got %q", r.Header.Get("Authorization"))
+	}
+}
+
 func TestGetAlias_Found(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertBasicAuth(t, r)
 		if r.Method != http.MethodGet {
 			t.Errorf("unexpected method %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(&femail.Alias{
-			Name:       "johndoe",
-			Recipients: []string{"john@example.com"},
-		})
+		_, _ = w.Write([]byte(`{"name":"johndoe","recipients":["john@example.com"]}`))
 	}))
 	defer srv.Close()
 
@@ -52,8 +59,8 @@ func TestGetAlias_NotFound(t *testing.T) {
 
 	client := newTestClient(srv)
 	_, err := client.GetAlias(context.Background(), "linux.com", "unknown")
-	if !errors.Is(err, femail.ErrNotFound) {
-		t.Errorf("expected ErrNotFound, got %v", err)
+	if !errors.Is(err, model.ErrAliasNotFound) {
+		t.Errorf("expected ErrAliasNotFound, got %v", err)
 	}
 }
 
@@ -75,21 +82,18 @@ func TestAliasExists(t *testing.T) {
 
 func TestCreateAlias(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertBasicAuth(t, r)
 		if r.Method != http.MethodPost {
 			t.Errorf("unexpected method %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(&femail.Alias{
-			Name:       "newuser",
-			Recipients: []string{"new@example.com"},
-			Labels:     []string{"lfid:auth0|123"},
-		})
+		_, _ = w.Write([]byte(`{"name":"newuser","recipients":["new@example.com"],"labels":["lfid:auth0|123"]}`))
 	}))
 	defer srv.Close()
 
 	client := newTestClient(srv)
-	alias, err := client.CreateAlias(context.Background(), "linux.com", &femail.CreateAliasRequest{
+	alias, err := client.CreateAlias(context.Background(), "linux.com", &model.CreateAliasRequest{
 		Name:       "newuser",
 		Recipients: []string{"new@example.com"},
 		Labels:     []string{"lfid:auth0|123"},
@@ -105,19 +109,17 @@ func TestCreateAlias(t *testing.T) {
 
 func TestUpdateAlias(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertBasicAuth(t, r)
 		if r.Method != http.MethodPut {
 			t.Errorf("unexpected method %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(&femail.Alias{
-			Name:       "existing",
-			Recipients: []string{"updated@example.com"},
-		})
+		_, _ = w.Write([]byte(`{"name":"existing","recipients":["updated@example.com"]}`))
 	}))
 	defer srv.Close()
 
 	client := newTestClient(srv)
-	alias, err := client.UpdateAlias(context.Background(), "linux.com", "existing", &femail.UpdateAliasRequest{
+	alias, err := client.UpdateAlias(context.Background(), "linux.com", "existing", &model.UpdateAliasRequest{
 		Recipients: []string{"updated@example.com"},
 		IsEnabled:  true,
 	})

@@ -60,3 +60,28 @@ func TestValidateAlias(t *testing.T) {
 		})
 	}
 }
+
+// reservedAliasCanary is the expected set of reserved local parts, mirroring the
+// list in lfx-v2-auth-service. It is duplicated here on purpose: the two services
+// share no code, so this test is the drift guard. If you change the reserved list
+// in alias.go, update this slice too — and coordinate the same change in
+// lfx-v2-auth-service, or a name reserved there becomes claimable here.
+var reservedAliasCanary = []string{
+	"postmaster", "abuse", "hostmaster", "admin", "administrator",
+	"noreply", "no-reply", "root", "mailer-daemon", "linux",
+	"linuxfoundation", "lf", "security", "support", "info",
+	"webmaster", "ops", "devops", "itx-system",
+}
+
+// TestReservedAliasesRejected asserts every canonical reserved name is rejected by
+// ValidateAlias. Removing a name from the reserved set in alias.go (without updating
+// this canary) fails the test, making reserved-list drift visible in the diff.
+func TestReservedAliasesRejected(t *testing.T) {
+	for _, name := range reservedAliasCanary {
+		t.Run(name, func(t *testing.T) {
+			if _, code := model.ValidateAlias(name, "linux.com", nil); code != "alias_reserved" {
+				t.Errorf("ValidateAlias(%q) code = %q, want %q", name, code, "alias_reserved")
+			}
+		})
+	}
+}

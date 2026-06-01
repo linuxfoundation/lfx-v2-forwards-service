@@ -8,18 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/authservice"
-	femail "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/forwardemail"
-	jwtpkg "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/jwt"
+	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 )
 
 // mockVerifier is a port.TokenVerifier whose result is configured per test.
 type mockVerifier struct {
-	claims *jwtpkg.Claims
+	claims *model.Claims
 	err    error
 }
 
-func (m *mockVerifier) Verify(_ context.Context, _ string) (*jwtpkg.Claims, error) {
+func (m *mockVerifier) Verify(_ context.Context, _ string) (*model.Claims, error) {
 	return m.claims, m.err
 }
 
@@ -35,20 +33,20 @@ func (m *mockAuthClient) GetAliasForDomain(_ context.Context, _, _ string) (stri
 
 // mockFEClient is a port.ForwardEmailProvider whose per-method results are configured per test.
 type mockFEClient struct {
-	getAlias    *femail.Alias
+	getAlias    *model.Alias
 	getAliasErr error
 
 	exists    bool
 	existsErr error
 
-	created   *femail.Alias
+	created   *model.Alias
 	createErr error
 
-	updated   *femail.Alias
+	updated   *model.Alias
 	updateErr error
 }
 
-func (m *mockFEClient) GetAlias(_ context.Context, _, _ string) (*femail.Alias, error) {
+func (m *mockFEClient) GetAlias(_ context.Context, _, _ string) (*model.Alias, error) {
 	return m.getAlias, m.getAliasErr
 }
 
@@ -56,11 +54,11 @@ func (m *mockFEClient) AliasExists(_ context.Context, _, _ string) (bool, error)
 	return m.exists, m.existsErr
 }
 
-func (m *mockFEClient) CreateAlias(_ context.Context, _ string, _ *femail.CreateAliasRequest) (*femail.Alias, error) {
+func (m *mockFEClient) CreateAlias(_ context.Context, _ string, _ *model.CreateAliasRequest) (*model.Alias, error) {
 	return m.created, m.createErr
 }
 
-func (m *mockFEClient) UpdateAlias(_ context.Context, _, _ string, _ *femail.UpdateAliasRequest) (*femail.Alias, error) {
+func (m *mockFEClient) UpdateAlias(_ context.Context, _, _ string, _ *model.UpdateAliasRequest) (*model.Alias, error) {
 	return m.updated, m.updateErr
 }
 
@@ -141,7 +139,7 @@ func TestNew_NilJWTConfig(t *testing.T) {
 
 func TestHandleSetTarget(t *testing.T) {
 	const domain = "linux.com"
-	okClaims := &jwtpkg.Claims{Subject: "auth0|abc"}
+	okClaims := &model.Claims{Subject: "auth0|abc"}
 
 	tests := []struct {
 		name       string
@@ -164,7 +162,7 @@ func TestHandleSetTarget(t *testing.T) {
 		{
 			name:     "no alias for domain returns not_found",
 			verifier: &mockVerifier{claims: okClaims},
-			auth:     &mockAuthClient{err: authservice.ErrNoAliasForDomain},
+			auth:     &mockAuthClient{err: model.ErrNoAliasForDomain},
 			fe:       &mockFEClient{},
 			target:   "me@example.com",
 			wantErr:  "not_found",
@@ -205,7 +203,7 @@ func TestHandleSetTarget(t *testing.T) {
 			name:       "happy path creates alias",
 			verifier:   &mockVerifier{claims: okClaims},
 			auth:       &mockAuthClient{alias: "johndoe"},
-			fe:         &mockFEClient{exists: false, created: &femail.Alias{UpdatedAt: "2026-01-02T15:04:05Z"}},
+			fe:         &mockFEClient{exists: false, created: &model.Alias{UpdatedAt: "2026-01-02T15:04:05Z"}},
 			target:     "me@example.com",
 			wantAlias:  "johndoe",
 			wantTarget: "me@example.com",
@@ -214,7 +212,7 @@ func TestHandleSetTarget(t *testing.T) {
 			name:       "happy path updates existing alias",
 			verifier:   &mockVerifier{claims: okClaims},
 			auth:       &mockAuthClient{alias: "johndoe"},
-			fe:         &mockFEClient{exists: true, updated: &femail.Alias{UpdatedAt: "2026-01-02T15:04:05Z"}},
+			fe:         &mockFEClient{exists: true, updated: &model.Alias{UpdatedAt: "2026-01-02T15:04:05Z"}},
 			target:     "me@example.com",
 			wantAlias:  "johndoe",
 			wantTarget: "me@example.com",
@@ -252,7 +250,7 @@ func TestHandleSetTarget(t *testing.T) {
 
 func TestHandleGetForward(t *testing.T) {
 	const domain = "linux.com"
-	okClaims := &jwtpkg.Claims{Subject: "auth0|abc"}
+	okClaims := &model.Claims{Subject: "auth0|abc"}
 
 	tests := []struct {
 		name       string
@@ -274,7 +272,7 @@ func TestHandleGetForward(t *testing.T) {
 		{
 			name:      "no alias for domain returns not found, no error",
 			verifier:  &mockVerifier{claims: okClaims},
-			auth:      &mockAuthClient{err: authservice.ErrNoAliasForDomain},
+			auth:      &mockAuthClient{err: model.ErrNoAliasForDomain},
 			fe:        &mockFEClient{},
 			wantFound: false,
 		},
@@ -289,7 +287,7 @@ func TestHandleGetForward(t *testing.T) {
 			name:      "alias absent in forwardemail returns not found, no error",
 			verifier:  &mockVerifier{claims: okClaims},
 			auth:      &mockAuthClient{alias: "johndoe"},
-			fe:        &mockFEClient{getAliasErr: femail.ErrNotFound},
+			fe:        &mockFEClient{getAliasErr: model.ErrAliasNotFound},
 			wantFound: false,
 		},
 		{
@@ -303,7 +301,7 @@ func TestHandleGetForward(t *testing.T) {
 			name:       "happy path returns current target",
 			verifier:   &mockVerifier{claims: okClaims},
 			auth:       &mockAuthClient{alias: "johndoe"},
-			fe:         &mockFEClient{getAlias: &femail.Alias{Recipients: []string{"me@example.com"}}},
+			fe:         &mockFEClient{getAlias: &model.Alias{Recipients: []string{"me@example.com"}}},
 			wantFound:  true,
 			wantAlias:  "johndoe",
 			wantTarget: "me@example.com",

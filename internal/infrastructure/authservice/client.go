@@ -8,15 +8,12 @@ package authservice
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 	natsclient "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/nats"
 )
-
-// ErrNoAliasForDomain is returned when the caller has no identity for the requested domain.
-var ErrNoAliasForDomain = errors.New("no alias found for user on requested domain")
 
 // Client calls lfx-v2-auth-service via NATS request/reply.
 type Client struct {
@@ -57,7 +54,7 @@ type emailItem struct {
 
 // GetAliasForDomain calls auth-service to look up the caller's alias on the given domain.
 // It returns the local part of the alias (e.g. "johndoe" for "johndoe@linux.com")
-// or ErrNoAliasForDomain if the user has no such identity.
+// or model.ErrNoAliasForDomain if the user has no such identity.
 func (c *Client) GetAliasForDomain(ctx context.Context, authToken, domain string) (string, error) {
 	reqBody := getUserEmailsRequest{}
 	reqBody.User.AuthToken = authToken
@@ -86,7 +83,7 @@ func (c *Client) GetAliasForDomain(ctx context.Context, authToken, domain string
 	}
 
 	if reply.Data == nil {
-		return "", ErrNoAliasForDomain
+		return "", model.ErrNoAliasForDomain
 	}
 
 	suffix := "@" + strings.ToLower(strings.TrimSpace(domain))
@@ -109,5 +106,5 @@ func (c *Client) GetAliasForDomain(ctx context.Context, authToken, domain string
 		}
 	}
 
-	return "", ErrNoAliasForDomain
+	return "", model.ErrNoAliasForDomain
 }

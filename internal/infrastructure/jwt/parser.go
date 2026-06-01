@@ -20,20 +20,9 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-)
 
-// Claims represents the parsed JWT claims with commonly used fields.
-type Claims struct {
-	Subject   string         `json:"sub"`
-	Email     string         `json:"email,omitempty"`
-	ExpiresAt *time.Time     `json:"exp,omitempty"`
-	IssuedAt  *time.Time     `json:"iat,omitempty"`
-	NotBefore *time.Time     `json:"nbf,omitempty"`
-	Issuer    string         `json:"iss,omitempty"`
-	Audience  string         `json:"aud,omitempty"`
-	Scope     string         `json:"scope,omitempty"`
-	Raw       map[string]any `json:"-"`
-}
+	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
+)
 
 // ParseOptions configures JWT parsing behavior.
 type ParseOptions struct {
@@ -57,7 +46,7 @@ func DefaultParseOptions() *ParseOptions {
 }
 
 // ParseVerified parses a JWT token with RSA signature verification.
-func ParseVerified(ctx context.Context, tokenString string, opts *ParseOptions) (*Claims, error) {
+func ParseVerified(ctx context.Context, tokenString string, opts *ParseOptions) (*model.Claims, error) {
 	if opts == nil {
 		opts = DefaultParseOptions()
 	}
@@ -118,7 +107,7 @@ func ParseVerified(ctx context.Context, tokenString string, opts *ParseOptions) 
 
 // ParseUnverified parses a JWT token without signature verification.
 // Useful for extracting claims when the token is validated by a downstream service.
-func ParseUnverified(ctx context.Context, tokenString string, opts *ParseOptions) (*Claims, error) {
+func ParseUnverified(ctx context.Context, tokenString string, opts *ParseOptions) (*model.Claims, error) {
 	if opts == nil {
 		opts = DefaultParseOptions()
 	}
@@ -240,7 +229,7 @@ func NewConfigFromJWKS(ctx context.Context, auth0Domain, audience string) (*Conf
 // Verify validates a JWT token using this Config and returns the claims.
 // Key selection is kid-aware: jwt.Parse matches the token's `kid` header against
 // the key set so that key rotation does not cause valid tokens to be rejected.
-func (c *Config) Verify(ctx context.Context, token string) (*Claims, error) {
+func (c *Config) Verify(ctx context.Context, token string) (*model.Claims, error) {
 	cleanToken, err := cleanTokenString(token, true)
 	if err != nil {
 		return nil, err
@@ -293,8 +282,8 @@ func cleanTokenString(tokenString string, allowBearer bool) (string, error) {
 	return clean, nil
 }
 
-func extractClaimsFromJWT(token jwt.Token) (*Claims, error) {
-	claims := &Claims{Raw: make(map[string]any)}
+func extractClaimsFromJWT(token jwt.Token) (*model.Claims, error) {
+	claims := &model.Claims{Raw: make(map[string]any)}
 
 	claims.Subject = token.Subject()
 	claims.Issuer = token.Issuer()
@@ -328,7 +317,7 @@ func extractClaimsFromJWT(token jwt.Token) (*Claims, error) {
 	return claims, nil
 }
 
-func validateExpiration(claims *Claims) error {
+func validateExpiration(claims *model.Claims) error {
 	if claims.ExpiresAt == nil {
 		return fmt.Errorf("missing 'exp' claim in token")
 	}
@@ -338,7 +327,7 @@ func validateExpiration(claims *Claims) error {
 	return nil
 }
 
-func validateScopes(claims *Claims, required []string) error {
+func validateScopes(claims *model.Claims, required []string) error {
 	if claims.Scope == "" {
 		return fmt.Errorf("missing 'scope' claim in token")
 	}

@@ -6,7 +6,7 @@ package port
 import (
 	"context"
 
-	jwtpkg "github.com/linuxfoundation/lfx-v2-forwards-service/internal/infrastructure/jwt"
+	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 )
 
 // TokenVerifier is the port for verifying a JWT access token and returning its claims.
@@ -14,5 +14,5 @@ import (
 // substitute a mock to exercise the authenticated handlers without a real key set.
 type TokenVerifier interface {
 	// Verify validates the token's signature and standard claims, returning the parsed claims.
-	Verify(ctx context.Context, token string) (*jwtpkg.Claims, error)
+	Verify(ctx context.Context, token string) (*model.Claims, error)
 }

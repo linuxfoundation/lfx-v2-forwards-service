@@ -16,12 +16,11 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 )
 
 const defaultBaseURL = "https://api.forwardemail.net"
-
-// ErrNotFound is returned when a GET alias request returns HTTP 404.
-var ErrNotFound = errors.New("alias not found")
 
 // Client is a forwardemail.net REST client.
 type Client struct {
@@ -42,8 +41,8 @@ func New(token, baseURL string) *Client {
 	}
 }
 
-// Alias is the forwardemail.net alias object returned by the API.
-type Alias struct {
+// wireAlias is the forwardemail.net alias object returned by the API.
+type wireAlias struct {
 	ID         string      `json:"id"`
 	Name       string      `json:"name"`
 	Domain     aliasDomain `json:"domain"`
@@ -54,13 +53,22 @@ type Alias struct {
 	UpdatedAt  string      `json:"updated_at"`
 }
 
+// toModel converts the wire alias to the domain representation.
+func (w *wireAlias) toModel() *model.Alias {
+	return &model.Alias{
+		Name:       w.Name,
+		Recipients: w.Recipients,
+		UpdatedAt:  w.UpdatedAt,
+	}
+}
+
 type aliasDomain struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
 }
 
-// CreateAliasRequest is the body for POST /v1/domains/:domain/aliases.
-type CreateAliasRequest struct {
+// wireCreateAliasRequest is the body for POST /v1/domains/:domain/aliases.
+type wireCreateAliasRequest struct {
 	Name                     string   `json:"name"`
 	Recipients               []string `json:"recipients"`
 	Labels                   []string `json:"labels,omitempty"`
@@ -68,8 +76,8 @@ type CreateAliasRequest struct {
 	IsEnabled                bool     `json:"is_enabled"`
 }
 
-// UpdateAliasRequest is the body for PUT /v1/domains/:domain/aliases/:alias.
-type UpdateAliasRequest struct {
+// wireUpdateAliasRequest is the body for PUT /v1/domains/:domain/aliases/:alias.
+type wireUpdateAliasRequest struct {
 	Recipients []string `json:"recipients"`
 	IsEnabled  bool     `json:"is_enabled"`
 }
@@ -86,26 +94,26 @@ func (e *apiError) Error() string {
 }
 
 // GetAlias fetches an alias by local part from the given domain.
-// Returns ErrNotFound if the API returns 404.
-func (c *Client) GetAlias(ctx context.Context, domain, alias string) (*Alias, error) {
+// Returns model.ErrAliasNotFound if the API returns 404.
+func (c *Client) GetAlias(ctx context.Context, domain, alias string) (*model.Alias, error) {
 	uri := fmt.Sprintf("%s/v1/domains/%s/aliases/%s", c.baseURL, url.PathEscape(domain), url.PathEscape(alias))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var result Alias
+	var result wireAlias
 	if err := c.do(req, nil, &result); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result.toModel(), nil
 }
 
 // AliasExists returns true if the alias exists in forwardemail.net, false if it
 // returns 404. Any other error is propagated.
 func (c *Client) AliasExists(ctx context.Context, domain, alias string) (bool, error) {
 	_, err := c.GetAlias(ctx, domain, alias)
-	if errors.Is(err, ErrNotFound) {
+	if errors.Is(err, model.ErrAliasNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -115,10 +123,15 @@ func (c *Client) AliasExists(ctx context.Context, domain, alias string) (bool, e
 }
 
 // CreateAlias creates a new alias in the given domain.
-func (c *Client) CreateAlias(ctx context.Context, domain string, body *CreateAliasRequest) (*Alias, error) {
+func (c *Client) CreateAlias(ctx context.Context, domain string, body *model.CreateAliasRequest) (*model.Alias, error) {
 	uri := fmt.Sprintf("%s/v1/domains/%s/aliases", c.baseURL, url.PathEscape(domain))
 
-	data, err := json.Marshal(body)
+	data, err := json.Marshal(&wireCreateAliasRequest{
+		Name:       body.Name,
+		Recipients: body.Recipients,
+		Labels:     body.Labels,
+		IsEnabled:  body.IsEnabled,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -128,18 +141,21 @@ func (c *Client) CreateAlias(ctx context.Context, domain string, body *CreateAli
 		return nil, err
 	}
 
-	var result Alias
+	var result wireAlias
 	if err := c.do(req, data, &result); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result.toModel(), nil
 }
 
 // UpdateAlias updates the recipients of an existing alias.
-func (c *Client) UpdateAlias(ctx context.Context, domain, alias string, body *UpdateAliasRequest) (*Alias, error) {
+func (c *Client) UpdateAlias(ctx context.Context, domain, alias string, body *model.UpdateAliasRequest) (*model.Alias, error) {
 	uri := fmt.Sprintf("%s/v1/domains/%s/aliases/%s", c.baseURL, url.PathEscape(domain), url.PathEscape(alias))
 
-	data, err := json.Marshal(body)
+	data, err := json.Marshal(&wireUpdateAliasRequest{
+		Recipients: body.Recipients,
+		IsEnabled:  body.IsEnabled,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -149,17 +165,17 @@ func (c *Client) UpdateAlias(ctx context.Context, domain, alias string, body *Up
 		return nil, err
 	}
 
-	var result Alias
+	var result wireAlias
 	if err := c.do(req, data, &result); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result.toModel(), nil
 }
 
 // do executes an HTTP request with basic auth, JSON headers, and 429 retry backoff.
 // bodyBytes must be the raw JSON body for POST/PUT/PATCH requests; it is used to
 // rebuild the request body for each attempt since the reader is consumed on first use.
-// On HTTP 404, it returns ErrNotFound. On other non-2xx responses it returns an *apiError.
+// On HTTP 404, it returns model.ErrAliasNotFound. On other non-2xx responses it returns an *apiError.
 func (c *Client) do(req *http.Request, bodyBytes []byte, out interface{}) error {
 	req.Header.Set("Accept", "application/json")
 	req.SetBasicAuth(c.token, "")
@@ -198,7 +214,7 @@ func (c *Client) do(req *http.Request, bodyBytes []byte, out interface{}) error 
 
 		if resp.StatusCode == http.StatusNotFound {
 			_ = resp.Body.Close()
-			return ErrNotFound
+			return model.ErrAliasNotFound
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
