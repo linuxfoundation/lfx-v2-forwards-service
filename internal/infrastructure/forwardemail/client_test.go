@@ -145,6 +145,9 @@ func TestUpdateAlias(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			if alias.Name != "existing" {
+				t.Errorf("alias.Name = %q, want %q", alias.Name, "existing")
+			}
 			if len(alias.Recipients) == 0 || alias.Recipients[0] != "updated@example.com" {
 				t.Errorf("unexpected recipients: %v", alias.Recipients)
 			}
