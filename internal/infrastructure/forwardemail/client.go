@@ -42,15 +42,19 @@ func New(token, baseURL string) *Client {
 }
 
 // wireAlias is the forwardemail.net alias object returned by the API.
+//
+// Note: the API returns the "domain" field as an object on GET but as a bare
+// string (the domain id) on the PUT response. It is intentionally not modeled
+// here — the decoder ignores the unknown key regardless of shape, which keeps
+// UpdateAlias from failing to decode a response that otherwise applied.
 type wireAlias struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	Domain     aliasDomain `json:"domain"`
-	Labels     []string    `json:"labels"`
-	Recipients []string    `json:"recipients"`
-	IsEnabled  bool        `json:"is_enabled"`
-	CreatedAt  string      `json:"created_at"`
-	UpdatedAt  string      `json:"updated_at"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Labels     []string `json:"labels"`
+	Recipients []string `json:"recipients"`
+	IsEnabled  bool     `json:"is_enabled"`
+	CreatedAt  string   `json:"created_at"`
+	UpdatedAt  string   `json:"updated_at"`
 }
 
 // toModel converts the wire alias to the domain representation.
@@ -60,11 +64,6 @@ func (w *wireAlias) toModel() *model.Alias {
 		Recipients: w.Recipients,
 		UpdatedAt:  w.UpdatedAt,
 	}
-}
-
-type aliasDomain struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
 }
 
 // wireCreateAliasRequest is the body for POST /v1/domains/:domain/aliases.
