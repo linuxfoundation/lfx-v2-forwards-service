@@ -107,26 +107,47 @@ func TestCreateAlias(t *testing.T) {
 	}
 }
 
+// TestUpdateAlias covers both shapes of the "domain" field forwardemail.net
+// returns: a bare string id on the PUT response (the shape that originally
+// broke decoding) and the object form returned on GET. Both must decode.
 func TestUpdateAlias(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assertBasicAuth(t, r)
-		if r.Method != http.MethodPut {
-			t.Errorf("unexpected method %s", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"name":"existing","recipients":["updated@example.com"]}`))
-	}))
-	defer srv.Close()
-
-	client := newTestClient(srv)
-	alias, err := client.UpdateAlias(context.Background(), "linux.com", "existing", &model.UpdateAliasRequest{
-		Recipients: []string{"updated@example.com"},
-		IsEnabled:  true,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "domain as string",
+			body: `{"name":"existing","recipients":["updated@example.com"],"domain":"5f2d3c1a9b7e0d4f6a8c1234"}`,
+		},
+		{
+			name: "domain as object",
+			body: `{"name":"existing","recipients":["updated@example.com"],"domain":{"id":"5f2d3c1a9b7e0d4f6a8c1234","name":"linux.com"}}`,
+		},
 	}
-	if len(alias.Recipients) == 0 || alias.Recipients[0] != "updated@example.com" {
-		t.Errorf("unexpected recipients: %v", alias.Recipients)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assertBasicAuth(t, r)
+				if r.Method != http.MethodPut {
+					t.Errorf("unexpected method %s", r.Method)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			client := newTestClient(srv)
+			alias, err := client.UpdateAlias(context.Background(), "linux.com", "existing", &model.UpdateAliasRequest{
+				Recipients: []string{"updated@example.com"},
+				IsEnabled:  true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(alias.Recipients) == 0 || alias.Recipients[0] != "updated@example.com" {
+				t.Errorf("unexpected recipients: %v", alias.Recipients)
+			}
+		})
 	}
 }
