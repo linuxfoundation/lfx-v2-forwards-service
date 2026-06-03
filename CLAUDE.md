@@ -67,7 +67,9 @@ Other targets: `make run` (build + execute), `make docker-build`, `make helm-ins
 ## Conventions
 
 ### Config injection
-All `os.Getenv` calls belong in `cmd/forwards-api/service/config.go` → `AppConfigFromEnv()`. The rest of the codebase receives typed values via the `AppConfig` and `service.Config` structs, never calling `os.Getenv` themselves. Required env vars: `FORWARDEMAIL_API_TOKEN`, `FORWARDS_DOMAINS`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`.
+All **service** `os.Getenv` calls belong in `cmd/forwards-api/service/config.go` → `AppConfigFromEnv()`. The rest of the codebase receives typed values via the `AppConfig` and `service.Config` structs, never calling `os.Getenv` themselves. Required env vars: `FORWARDEMAIL_API_TOKEN`, `FORWARDS_DOMAINS`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`.
+
+**Exception:** OpenTelemetry `OTEL_*` vars are read directly in `internal/infrastructure/observability/otel.go` (`OTelConfigFromEnv`), following OTel SDK conventions — do not move these into `config.go`.
 
 ### Dependency injection
 `InitInfrastructure()` in `cmd/forwards-api/service/implementations.go` builds the infrastructure adapters and populates the package-level singletons `NATSClient` and `ForwardSvc`. `Shutdown()` tears them down. All dependencies are passed as port interfaces.
@@ -78,7 +80,7 @@ All `os.Getenv` calls belong in `cmd/forwards-api/service/config.go` → `AppCon
 3. Add a `subscribe<Name>` func and append it to the `subscribers` slice in `cmd/forwards-api/service/subscriptions.go`
 
 ### Error handling
-- Service methods return a string `errCode` (e.g. `alias_invalid`, `alias_reserved`, `domain_not_allowed`, `unauthorized`, `not_found`, `target_email_invalid`, `forwardemail_error`) which is surfaced in the reply's `error` field.
+- Service methods return a string `errCode` (e.g. `alias_invalid`, `alias_reserved`, `domain_required`, `domain_not_allowed`, `unauthorized`, `not_found`, `target_email_invalid`, `forwardemail_error`) which is surfaced in the reply's `error` field.
 - Malformed NATS payloads reply with `malformed_request` and are discarded (they will never parse successfully on retry).
 - Domain sentinel errors (`ErrAliasNotFound`, `ErrNoAliasForDomain`) live in `internal/domain/model/errors.go`.
 
