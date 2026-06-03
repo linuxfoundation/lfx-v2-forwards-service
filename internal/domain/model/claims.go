@@ -14,7 +14,7 @@ type Claims struct {
 	IssuedAt  *time.Time
 	NotBefore *time.Time
 	Issuer    string
-	Audience  string
+	Audience  []string
 	Scope     string
 	Raw       map[string]any
 }
