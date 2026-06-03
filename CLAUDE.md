@@ -23,7 +23,7 @@ It owns alias **routing** (alias → target email). Alias **ownership** is manag
 cmd/forwards-api/
 ├── main.go                   # OTel bootstrap, signal handling, graceful shutdown
 └── service/
-    ├── config.go             # ALL env var reads live here — AppConfigFromEnv()
+    ├── config.go             # service env var reads (OTEL_* live in otel.go) — AppConfigFromEnv()
     ├── implementations.go    # InitInfrastructure() wires singletons (NATSClient, ForwardSvc)
     └── subscriptions.go      # StartSubscriptions() — slice of {subject, bind} subscribers
 
