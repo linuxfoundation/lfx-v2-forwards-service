@@ -72,10 +72,8 @@ func ParseVerified(ctx context.Context, tokenString string, opts *ParseOptions) 
 		}
 	}
 
-	if opts.ExpectedAudience != "" {
-		if claims.Audience != opts.ExpectedAudience {
-			return nil, fmt.Errorf("invalid audience")
-		}
+	if opts.ExpectedAudience != "" && !slices.Contains(claims.Audience, opts.ExpectedAudience) {
+		return nil, fmt.Errorf("invalid audience")
 	}
 
 	if opts.RequireExpiration {
@@ -252,7 +250,7 @@ func (c *Config) Verify(ctx context.Context, token string) (*model.Claims, error
 	if c.ExpectedIssuer != "" && claims.Issuer != c.ExpectedIssuer {
 		return nil, fmt.Errorf("invalid issuer %q, expected %q", claims.Issuer, c.ExpectedIssuer)
 	}
-	if c.ExpectedAudience != "" && claims.Audience != c.ExpectedAudience {
+	if c.ExpectedAudience != "" && !slices.Contains(claims.Audience, c.ExpectedAudience) {
 		return nil, fmt.Errorf("invalid audience")
 	}
 	if strings.TrimSpace(claims.Subject) == "" {
@@ -288,9 +286,7 @@ func extractClaimsFromJWT(token jwt.Token) (*model.Claims, error) {
 	claims.Subject = token.Subject()
 	claims.Issuer = token.Issuer()
 
-	if audience := token.Audience(); len(audience) > 0 {
-		claims.Audience = audience[0]
-	}
+	claims.Audience = token.Audience()
 
 	if email, ok := token.Get("email"); ok {
 		if s, ok := email.(string); ok {
