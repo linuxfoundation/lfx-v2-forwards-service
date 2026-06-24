@@ -38,11 +38,10 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	otelConfig := observability.OTelConfigFromEnv(ctx)
-	if otelConfig.ServiceVersion == "" {
-		otelConfig.ServiceVersion = Version
+	if os.Getenv("OTEL_SERVICE_VERSION") == "" {
+		_ = os.Setenv("OTEL_SERVICE_VERSION", Version)
 	}
-	otelShutdown, err := observability.SetupOTelSDKWithConfig(ctx, otelConfig)
+	otelShutdown, err := observability.SetupOTelSDK(ctx)
 	if err != nil {
 		return err
 	}
