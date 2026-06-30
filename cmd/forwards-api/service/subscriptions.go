@@ -58,7 +58,7 @@ func StartSubscriptions(ctx context.Context) ([]func(), error) {
 }
 
 func subscribeCheckAlias(ctx context.Context) (func(), error) {
-	stop, err := NATSClient.QueueSubscribe(api.CheckAliasSubject, forwardsQueueGroup, func(ctx context.Context, msg *nats.Msg) {
+	stop, err := NATSClient.QueueSubscribe(ctx, api.CheckAliasSubject, forwardsQueueGroup, func(ctx context.Context, msg *nats.Msg) {
 		msgCtx, cancel := context.WithTimeout(ctx, msgHandlerTimeout)
 		defer cancel()
 
@@ -92,7 +92,7 @@ func subscribeCheckAlias(ctx context.Context) (func(), error) {
 }
 
 func subscribeSetTarget(ctx context.Context) (func(), error) {
-	stop, err := NATSClient.QueueSubscribe(api.SetTargetSubject, forwardsQueueGroup, func(ctx context.Context, msg *nats.Msg) {
+	stop, err := NATSClient.QueueSubscribe(ctx, api.SetTargetSubject, forwardsQueueGroup, func(ctx context.Context, msg *nats.Msg) {
 		msgCtx, cancel := context.WithTimeout(ctx, msgHandlerTimeout)
 		defer cancel()
 
@@ -126,7 +126,7 @@ func subscribeSetTarget(ctx context.Context) (func(), error) {
 }
 
 func subscribeGetForward(ctx context.Context) (func(), error) {
-	stop, err := NATSClient.QueueSubscribe(api.GetForwardSubject, forwardsQueueGroup, func(ctx context.Context, msg *nats.Msg) {
+	stop, err := NATSClient.QueueSubscribe(ctx, api.GetForwardSubject, forwardsQueueGroup, func(ctx context.Context, msg *nats.Msg) {
 		msgCtx, cancel := context.WithTimeout(ctx, msgHandlerTimeout)
 		defer cancel()
 

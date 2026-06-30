@@ -90,10 +90,11 @@ func (c *Client) Request(ctx context.Context, subject string, data []byte) ([]by
 
 // QueueSubscribe registers a core-NATS queue-group subscriber and returns an
 // unsubscribe function the caller must invoke on shutdown.
-// The handler receives the span context extracted from incoming message headers.
-func (c *Client) QueueSubscribe(subject, queue string, handler func(ctx context.Context, msg *nats.Msg)) (func(), error) {
+// The handler receives the span context extracted from incoming message headers,
+// rooted at ctx so that shutdown cancellation propagates to in-flight handlers.
+func (c *Client) QueueSubscribe(ctx context.Context, subject, queue string, handler func(ctx context.Context, msg *nats.Msg)) (func(), error) {
 	sub, err := c.conn.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
-		msgCtx := otel.GetTextMapPropagator().Extract(context.Background(), natsHeaderCarrier(msg.Header))
+		msgCtx := otel.GetTextMapPropagator().Extract(ctx, natsHeaderCarrier(msg.Header))
 		msgCtx, span := tracer.Start(msgCtx, "nats.process",
 			trace.WithSpanKind(trace.SpanKindConsumer),
 			trace.WithAttributes(
