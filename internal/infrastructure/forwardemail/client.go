@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const defaultBaseURL = "https://api.forwardemail.net"
@@ -35,7 +36,7 @@ func New(token, baseURL string) *Client {
 		baseURL = defaultBaseURL
 	}
 	return &Client{
-		http:    &http.Client{Timeout: 15 * time.Second},
+		http:    &http.Client{Timeout: 15 * time.Second, Transport: otelhttp.NewTransport(http.DefaultTransport)},
 		baseURL: baseURL,
 		token:   token,
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/linuxfoundation/lfx-v2-forwards-service/internal/domain/model"
 )
@@ -183,7 +184,7 @@ const jwksMinRefreshInterval = 15 * time.Minute
 func NewConfigFromJWKS(ctx context.Context, auth0Domain, audience string) (*Config, error) {
 	jwksURL := fmt.Sprintf("https://%s/.well-known/jwks.json", auth0Domain)
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	httpClient := &http.Client{Timeout: 10 * time.Second, Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
 	cache := jwk.NewCache(ctx)
 	if err := cache.Register(jwksURL,
