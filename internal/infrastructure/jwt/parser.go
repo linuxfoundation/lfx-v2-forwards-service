@@ -104,61 +104,6 @@ func ParseVerified(ctx context.Context, tokenString string, opts *ParseOptions) 
 	return claims, nil
 }
 
-// ParseUnverified parses a JWT token without signature verification.
-// Useful for extracting claims when the token is validated by a downstream service.
-func ParseUnverified(ctx context.Context, tokenString string, opts *ParseOptions) (*model.Claims, error) {
-	if opts == nil {
-		opts = DefaultParseOptions()
-	}
-
-	cleanToken, err := cleanTokenString(tokenString, opts.AllowBearerPrefix)
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := jwt.Parse([]byte(cleanToken), jwt.WithVerify(false), jwt.WithValidate(false))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse JWT token: %w", err)
-	}
-
-	claims, err := extractClaimsFromJWT(token)
-	if err != nil {
-		return nil, err
-	}
-
-	if opts.RequireExpiration {
-		if err := validateExpiration(claims); err != nil {
-			return nil, err
-		}
-	}
-
-	if opts.RequireSubject {
-		if strings.TrimSpace(claims.Subject) == "" {
-			return nil, fmt.Errorf("missing or invalid 'sub' claim in token")
-		}
-	}
-
-	slog.DebugContext(ctx, "JWT parsed (unverified)", "sub", claims.Subject)
-	return claims, nil
-}
-
-// ExtractSubject extracts only the 'sub' claim without signature verification.
-func ExtractSubject(ctx context.Context, tokenString string) (string, error) {
-	opts := &ParseOptions{
-		RequireExpiration: false,
-		AllowBearerPrefix: true,
-		RequireSubject:    false,
-	}
-	claims, err := ParseUnverified(ctx, tokenString, opts)
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(claims.Subject) == "" {
-		return "", fmt.Errorf("missing or invalid 'sub' claim in token")
-	}
-	return claims.Subject, nil
-}
-
 // Config holds a cached JWKS key set and the expected issuer/audience.
 // The key set includes all RSA signing keys from the Auth0 JWKS endpoint;
 // jwt.Parse selects the matching key by `kid` header automatically.

@@ -44,23 +44,6 @@ func (h contextHandler) WithGroup(name string) slog.Handler {
 	return contextHandler{Handler: h.Handler.WithGroup(name)}
 }
 
-// AppendCtx attaches an slog.Attr to ctx so it will be included on every
-// Record emitted with that context (via the package's contextHandler). Use
-// this from handlers to thread request-scoped fields (e.g. alias, sub)
-// into every log line for the request.
-func AppendCtx(parent context.Context, attr slog.Attr) context.Context {
-	if parent == nil {
-		parent = context.Background()
-	}
-	if v, ok := parent.Value(slogFields).([]slog.Attr); ok {
-		next := make([]slog.Attr, len(v), len(v)+1)
-		copy(next, v)
-		next = append(next, attr)
-		return context.WithValue(parent, slogFields, next)
-	}
-	return context.WithValue(parent, slogFields, []slog.Attr{attr})
-}
-
 // InitStructureLogConfig initializes the structured log configuration.
 // logLevel should be "debug", "info", "warn", "error", or "" for the default (info).
 // Call with "" during init() for early startup logging, then call again after
