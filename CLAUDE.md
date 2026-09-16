@@ -9,7 +9,7 @@ It owns alias **routing** (alias → target email). Alias **ownership** is manag
 
 ## Key Technologies
 
-- **Language**: Go 1.25+
+- **Language**: Go 1.26+
 - **Messaging**: NATS core (request/reply, queue groups)
 - **Auth**: Auth0-issued JWTs verified via JWKS (`lestrrat-go/jwx/v2`)
 - **Upstream API**: forwardemail.net REST (stdlib `net/http`, Basic Auth)
