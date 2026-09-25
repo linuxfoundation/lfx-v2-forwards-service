@@ -1,0 +1,170 @@
+# Copyright The Linux Foundation and each contributor to LFX.
+# SPDX-License-Identifier: MIT
+
+# image is the configuration for the container image
+image:
+  # repository is the container image repository
+  repository: ghcr.io/linuxfoundation/lfx-v2-forwards-service/forwards-api
+  # tag is the container image tag (overrides appVersion from Chart.yaml)
+  tag: ""
+  # pullPolicy is the image pull policy
+  pullPolicy: IfNotPresent
+
+# replicaCount is the number of replicas for the deployment
+replicaCount: 1
+
+# annotations are additional annotations applied to the Deployment itself
+annotations: {}
+
+# podAnnotations are additional annotations applied to the pod template
+podAnnotations: {}
+
+# podLabels are additional labels applied to the pod template
+podLabels: {}
+
+# podDisruptionBudget configures a PodDisruptionBudget for the deployment.
+# Only one of minAvailable or maxUnavailable may be set.
+podDisruptionBudget:
+  # enabled controls whether a PodDisruptionBudget is created
+  enabled: false
+  # minAvailable: 1
+
+# topologySpreadConstraints controls how pods are spread across nodes/zones.
+topologySpreadConstraints: []
+
+# resources is the configuration for container resource requests and limits
+resources:
+  limits:
+    cpu: 100m
+    memory: 64Mi
+  requests:
+    cpu: 25m
+    memory: 32Mi
+
+# app is the configuration for the application
+app:
+  # environment is the map of container environment variables. Each key is the
+  # env-var name; each value is either {value: "..."} for a literal or
+  # {valueFrom: {...}} for a Kubernetes envVarSource (e.g. secretKeyRef).
+  # Secrets default to valueFrom so plaintext is never committed in values.yaml.
+  # Add more entries here to inject additional environment variables.
+  environment:
+    LOG_LEVEL:
+      value: "info"
+    NATS_URL:
+      value: "nats://lfx-platform-nats.lfx.svc.cluster.local:4222"
+    AUTH_SERVICE_SUBJECT:
+      value: "lfx.auth-service.user_emails.read"
+    AUTH_SERVICE_REQUEST_TIMEOUT:
+      value: "5s"
+    # FORWARDS_DOMAINS is the comma-separated allow-list of managed email domains.
+    # The forwardemail.net account behind FORWARDEMAIL_API_TOKEN must own all listed
+    # domains. Required — set per environment; startup fails if unset.
+    FORWARDS_DOMAINS:
+      value: ""
+    # AUTH0_DOMAIN is the Auth0 tenant hostname (no scheme) used to fetch JWKS
+    # and validate the iss claim. Set per environment.
+    AUTH0_DOMAIN:
+      value: ""
+    # AUTH0_AUDIENCE is the expected aud claim on inbound JWTs. Set per environment.
+    AUTH0_AUDIENCE:
+      value: ""
+    # FORWARDEMAIL_API_TOKEN is the forwardemail.net basic-auth API token.
+    # Sourced from the Kubernetes Secret created by ESO (or pre-created out-of-band
+    # for local dev — see values.local.yaml.example).
+    FORWARDEMAIL_API_TOKEN:
+      valueFrom:
+        secretKeyRef:
+          name: "lfx-v2-forwards-service"
+          key: forwardemail-api-token
+          optional: false
+
+  # extraEnv allows injecting additional environment variables into the container.
+  # Supports both simple key-value pairs and Kubernetes field references.
+  # These are rendered BEFORE OTEL variables, allowing use in OTEL configuration.
+  extraEnv: []
+
+  # otel is the configuration for OpenTelemetry observability
+  otel:
+    # serviceName is the service name for OpenTelemetry resource identification
+    # (default: "lfx-v2-forwards-service")
+    serviceName: ""
+    # serviceVersion is the service version for OpenTelemetry resource identification
+    # (default: build-time Version variable)
+    serviceVersion: ""
+    # protocol specifies the OTLP protocol: "grpc" or "http"
+    # (default: "grpc")
+    protocol: "grpc"
+    # endpoint is the OTLP collector endpoint
+    # For gRPC: typically "host:4317", for HTTP: typically "host:4318"
+    endpoint: ""
+    # insecure disables TLS for the OTLP connection
+    # Set to "true" for in-cluster communication without TLS
+    insecure: "false"
+    # tracesExporter specifies the traces exporter: "otlp" or "none"
+    # (default: "none")
+    tracesExporter: "none"
+    # tracesSampler specifies the OTEL_TRACES_SAMPLER type. Supported values:
+    # "always_on", "always_off", "traceidratio", "parentbased_always_on",
+    # "parentbased_always_off", "parentbased_traceidratio".
+    # When empty, the application defaults to parentbased_traceidratio.
+    tracesSampler: ""
+    # tracesSamplerArg specifies the OTEL_TRACES_SAMPLER_ARG (sampler ratio or parent_sampler_arg).
+    # Used by "traceidratio" and "parentbased_traceidratio" samplers (defaults to 1.0 if empty).
+    # (default: "")
+    tracesSamplerArg: ""
+    # metricsExporter specifies the metrics exporter: "otlp" or "none"
+    # (default: "none")
+    metricsExporter: "none"
+    # logsExporter specifies the logs exporter: "otlp" or "none"
+    # (default: "none")
+    logsExporter: "none"
+    # propagators specifies the trace context propagators to use
+    # Comma-separated list of: "tracecontext", "baggage", "jaeger"
+    # (default: "tracecontext,baggage,jaeger")
+    propagators: "tracecontext,baggage,jaeger"
+
+# networkPolicy controls the Kubernetes NetworkPolicy for this workload.
+networkPolicy:
+  enabled: true
+  # natsPort is the TCP port of the NATS broker.
+  natsPort: 4222
+  # otelGRPCPort is the gRPC port of the OpenTelemetry collector.
+  otelGRPCPort: 4317
+  # otelHTTPPort is the HTTP port of the OpenTelemetry collector.
+  otelHTTPPort: 4318
+  # httpsPort is used for outbound HTTPS to forwardemail.net and Auth0 JWKS.
+  httpsPort: 443
+
+# nats holds NATS-related settings that aren't environment variables (the URL
+# is exposed via app.environment.NATS_URL).
+nats:
+  # credentialsFile is the path to the NATS NKey credentials file inside the container.
+  # Leave empty to connect without credentials (for local dev).
+  credentialsFile: ""
+
+# serviceAccount is the configuration for the Kubernetes ServiceAccount
+serviceAccount:
+  create: true
+  name: "lfx-v2-forwards-service"
+  # annotations are used to attach an EKS IRSA role ARN for ESO:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role-name>
+  annotations: {}
+
+# global is configuration shared across chart dependencies
+global:
+  # awsRegion is the AWS region used by the External Secrets Operator SecretStore.
+  awsRegion: ""
+
+# externalSecretsOperator configures ESO integration for pulling secrets
+# from AWS Secrets Manager into a Kubernetes Secret.
+externalSecretsOperator:
+  enabled: false
+  externalSecret:
+    refreshInterval: "10m"
+    # data maps AWS Secrets Manager fields to Kubernetes Secret keys
+    data:
+      - secretKey: forwardemail-api-token # checkov:skip=CKV_SECRET_6 not a base64 value
+        remoteRef:
+          key: /cloudops/managed-secrets/cloud/forwards-service/forwardemail
+          property: forwardemail_api_token
