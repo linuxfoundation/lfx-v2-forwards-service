@@ -115,7 +115,7 @@ Full message contracts: [`pkg/api/forwards.go`](pkg/api/forwards.go).
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - NATS server (or dev cluster via `kubectl port-forward`)
 - A forwardemail.net API token
 - Auth0 domain + audience (dev tenant)
