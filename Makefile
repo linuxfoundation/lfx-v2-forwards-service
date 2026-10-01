@@ -15,8 +15,8 @@ HELM_RELEASE_NAME := lfx-v2-forwards-service
 HELM_NAMESPACE := lfx
 HELM_VALUES_FILE := ./charts/lfx-v2-forwards-service/values.local.yaml
 
-GO_VERSION := 1.25.0
-GOLANGCI_LINT_VERSION := v2.2.2
+GO_VERSION := 1.26.0
+GOLANGCI_LINT_VERSION := v2.10.1
 LINT_TIMEOUT := 10m
 LINT_TOOL := $(shell go env GOPATH)/bin/golangci-lint
 GO_FILES := $(shell find . -name '*.go' -not -path './gen/*' -not -path './vendor/*')
@@ -52,7 +52,7 @@ fmt:
 
 .PHONY: lint
 lint:
-	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	golangci-lint run ./...
 
 .PHONY: license-check
