@@ -13,7 +13,8 @@
 #
 #      The default values.yaml already references this secret via valueFrom,
 #      so the deployment will pick it up automatically. This chart does not
-#      generate the secret for you in local dev (ESO is disabled by default).
+#      generate the secret for you; in deployed environments it is provided
+#      by the ExternalSecret managed in lfx-v2-argocd.
 #
 #   2. Copy and edit overrides:
 #        cp values.local.yaml.example values.local.yaml

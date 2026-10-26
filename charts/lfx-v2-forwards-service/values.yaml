@@ -150,21 +150,3 @@ serviceAccount:
   # annotations are used to attach an EKS IRSA role ARN for ESO:
   #   eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role-name>
   annotations: {}
-
-# global is configuration shared across chart dependencies
-global:
-  # awsRegion is the AWS region used by the External Secrets Operator SecretStore.
-  awsRegion: ""
-
-# externalSecretsOperator configures ESO integration for pulling secrets
-# from AWS Secrets Manager into a Kubernetes Secret.
-externalSecretsOperator:
-  enabled: false
-  externalSecret:
-    refreshInterval: "10m"
-    # data maps AWS Secrets Manager fields to Kubernetes Secret keys
-    data:
-      - secretKey: forwardemail-api-token # checkov:skip=CKV_SECRET_6 not a base64 value
-        remoteRef:
-          key: /cloudops/managed-secrets/cloud/forwards-service/forwardemail
-          property: forwardemail_api_token
