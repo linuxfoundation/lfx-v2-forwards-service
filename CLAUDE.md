@@ -15,7 +15,7 @@ It owns alias **routing** (alias → target email). Alias **ownership** is manag
 - **Upstream API**: forwardemail.net REST (stdlib `net/http`, Basic Auth)
 - **Observability**: OpenTelemetry (traces, metrics, logs) + slog structured logging
 - **Container**: Chainguard distroless images, built with Ko
-- **Orchestration**: Kubernetes with Helm charts (External Secrets Operator)
+- **Orchestration**: Kubernetes with Helm charts (secrets via External Secrets Operator, managed in lfx-v2-argocd)
 
 ## Architecture
 
