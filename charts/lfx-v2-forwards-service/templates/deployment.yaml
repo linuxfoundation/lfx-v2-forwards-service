@@ -50,6 +50,8 @@ spec:
               drop: ["ALL"]
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: PORT
+              value: {{ .Values.app.port | quote }}
             {{- range $name, $config := .Values.app.environment }}
             - name: {{ $name }}
               {{- if $config.valueFrom }}
@@ -121,6 +123,24 @@ spec:
             - name: OTEL_PROPAGATORS
               value: {{ $otelPropagators | quote }}
             {{- end }}
-          # livenessProbe and readinessProbe are omitted — the service has no HTTP server.
+          ports:
+            - containerPort: {{ .Values.app.port }}
+              name: web
+          # The service is a pure NATS subscriber; the HTTP server exists only to
+          # serve these probes. /livez is always 200 while the process is up;
+          # /readyz is 503 until startup has finished (NATS connected and
+          # subscriptions registered) and while the NATS connection is down.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: web
+            failureThreshold: 3
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: web
+            failureThreshold: 1
+            periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

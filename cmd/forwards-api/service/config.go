@@ -38,7 +38,14 @@ type AppConfig struct {
 
 	// Logging
 	LogLevel string
+
+	// Port is the TCP port the health server (/livez, /readyz) listens on.
+	Port string
 }
+
+// defaultPort is the health server port used when PORT is unset. It matches the
+// chart's app.port and the container port named "web".
+const defaultPort = "8080"
 
 // AppConfigFromEnv reads AppConfig from environment variables, applying defaults
 // where reasonable. Returns an error if any required variable is missing.
@@ -60,6 +67,8 @@ func AppConfigFromEnv() (AppConfig, error) {
 		AuthServiceRequestTimeout: durationOr("AUTH_SERVICE_REQUEST_TIMEOUT", 5*time.Second),
 
 		LogLevel: os.Getenv("LOG_LEVEL"),
+
+		Port: envOr("PORT", defaultPort),
 	}
 
 	var missing []string
