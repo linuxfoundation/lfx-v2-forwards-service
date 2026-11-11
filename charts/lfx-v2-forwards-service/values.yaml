@@ -43,6 +43,10 @@ resources:
 
 # app is the configuration for the application
 app:
+  # port is the container port of the health server (/livez, /readyz) used by
+  # the kubelet probes. The service itself is a pure NATS subscriber.
+  port: 8080
+
   # environment is the map of container environment variables. Each key is the
   # env-var name; each value is either {value: "..."} for a literal or
   # {valueFrom: {...}} for a Kubernetes envVarSource (e.g. secretKeyRef).

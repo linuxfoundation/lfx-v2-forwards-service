@@ -5,7 +5,10 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -65,6 +68,29 @@ func run() error {
 	}
 	observability.InitStructureLogConfig(cfg.LogLevel)
 
+	// Start the health server first so /livez answers while NATS connects and
+	// JWKS loads. /readyz reports not-ready until startup has finished, then
+	// tracks the NATS connection state.
+	healthServer := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           appsvc.HealthHandler(appsvc.Ready),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	healthErr := make(chan error, 1)
+	go func() {
+		slog.InfoContext(ctx, "health server listening", "port", cfg.Port)
+		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			healthErr <- err
+		}
+	}()
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutErr := healthServer.Shutdown(shutCtx); shutErr != nil {
+			slog.ErrorContext(ctx, "error shutting down health server", "error", shutErr)
+		}
+	}()
+
 	if err := appsvc.InitInfrastructure(ctx, cfg); err != nil {
 		return err
 	}
@@ -80,10 +106,14 @@ func run() error {
 		}
 	}()
 
+	appsvc.MarkStarted()
 	slog.InfoContext(ctx, "forwards service ready")
 
-	<-ctx.Done()
-
-	slog.InfoContext(ctx, "received shutdown signal, stopping")
-	return nil
+	select {
+	case <-ctx.Done():
+		slog.InfoContext(ctx, "received shutdown signal, stopping")
+		return nil
+	case err := <-healthErr:
+		return fmt.Errorf("health server failed: %w", err)
+	}
 }
