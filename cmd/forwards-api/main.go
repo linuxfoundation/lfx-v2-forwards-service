@@ -26,6 +26,10 @@ var (
 
 const gracefulShutdownSeconds = 25
 
+// subscriptionFlushTimeout bounds the NATS round trip that confirms the broker
+// has registered all subscriptions before the service reports ready.
+const subscriptionFlushTimeout = 5 * time.Second
+
 func init() {
 	observability.InitStructureLogConfig("")
 }
@@ -70,16 +74,20 @@ func run() error {
 
 	// Start the health server first so /livez answers while NATS connects and
 	// JWKS loads. /readyz reports not-ready until startup has finished, then
-	// tracks the NATS connection state.
+	// tracks the NATS connection state. Bind the port up front so a busy or
+	// invalid port fails startup immediately.
+	healthListener, err := appsvc.ListenHealth(cfg.Port)
+	if err != nil {
+		return err
+	}
 	healthServer := &http.Server{
-		Addr:              ":" + cfg.Port,
 		Handler:           appsvc.HealthHandler(appsvc.Ready),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	healthErr := make(chan error, 1)
 	go func() {
 		slog.InfoContext(ctx, "health server listening", "port", cfg.Port)
-		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := healthServer.Serve(healthListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			healthErr <- err
 		}
 	}()
@@ -105,6 +113,12 @@ func run() error {
 			stop()
 		}
 	}()
+
+	// QueueSubscribe is asynchronous: confirm the broker has registered every
+	// subscription before /readyz can report ready.
+	if err := appsvc.FlushSubscriptions(subscriptionFlushTimeout); err != nil {
+		return fmt.Errorf("flush NATS subscriptions: %w", err)
+	}
 
 	appsvc.MarkStarted()
 	slog.InfoContext(ctx, "forwards service ready")

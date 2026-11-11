@@ -5,9 +5,34 @@ package service
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"sync/atomic"
+	"time"
 )
+
+// ListenHealth binds the health server's TCP port. Binding up front, before
+// the slow startup work (NATS, JWKS), surfaces a busy or invalid port as an
+// immediate error instead of a late failure.
+func ListenHealth(port string) (net.Listener, error) {
+	ln, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return nil, fmt.Errorf("listen on health port %q: %w", port, err)
+	}
+	return ln, nil
+}
+
+// FlushSubscriptions blocks until the broker has processed all subscriptions
+// registered by StartSubscriptions, or returns an error if timeout elapses.
+// Subscribe calls are asynchronous, so call this after StartSubscriptions and
+// before MarkStarted.
+func FlushSubscriptions(timeout time.Duration) error {
+	if NATSClient == nil {
+		return ErrNotReady
+	}
+	return NATSClient.Flush(timeout)
+}
 
 // ErrNotReady is returned by Ready until startup has finished.
 var ErrNotReady = errors.New("forwards service not ready")

@@ -5,9 +5,11 @@ package service
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestHealthHandler(t *testing.T) {
@@ -54,6 +56,36 @@ func TestReady(t *testing.T) {
 	MarkStarted()
 	if err := Ready(); !errors.Is(err, ErrNotReady) {
 		t.Errorf("started without NATSClient: Ready() = %v, want ErrNotReady", err)
+	}
+}
+
+func TestListenHealth(t *testing.T) {
+	// A free port (0 = OS-assigned) binds.
+	ln, err := ListenHealth("0")
+	if err != nil {
+		t.Fatalf("ListenHealth(0) = %v, want nil", err)
+	}
+	defer ln.Close() //nolint:errcheck
+
+	// The port is now taken: binding it again must fail with a clear error.
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatalf("SplitHostPort: %v", err)
+	}
+	if _, err := ListenHealth(port); err == nil {
+		t.Errorf("ListenHealth(%s) on a busy port = nil, want error", port)
+	}
+
+	// An invalid port fails too.
+	if _, err := ListenHealth("not-a-port"); err == nil {
+		t.Error("ListenHealth(not-a-port) = nil, want error")
+	}
+}
+
+func TestFlushSubscriptions_NoClient(t *testing.T) {
+	NATSClient = nil
+	if err := FlushSubscriptions(time.Second); !errors.Is(err, ErrNotReady) {
+		t.Errorf("FlushSubscriptions without NATSClient = %v, want ErrNotReady", err)
 	}
 }
 
