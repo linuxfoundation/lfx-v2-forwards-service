@@ -4,6 +4,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -82,10 +83,60 @@ func TestListenHealth(t *testing.T) {
 	}
 }
 
-func TestFlushSubscriptions_NoClient(t *testing.T) {
+func TestFlushWithRetry(t *testing.T) {
+	errDown := errors.New("broker down")
+
+	t.Run("succeeds immediately without retrying", func(t *testing.T) {
+		calls := 0
+		err := flushWithRetry(context.Background(), time.Millisecond, func() error {
+			calls++
+			return nil
+		})
+		if err != nil || calls != 1 {
+			t.Errorf("got err=%v calls=%d, want nil and 1 call", err, calls)
+		}
+	})
+
+	t.Run("retries until the flush succeeds", func(t *testing.T) {
+		calls := 0
+		err := flushWithRetry(context.Background(), time.Millisecond, func() error {
+			calls++
+			if calls < 3 {
+				return errDown
+			}
+			return nil
+		})
+		if err != nil || calls != 3 {
+			t.Errorf("got err=%v calls=%d, want nil after 3 calls", err, calls)
+		}
+	})
+
+	t.Run("stops when the context is cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		calls := 0
+		err := flushWithRetry(ctx, time.Millisecond, func() error {
+			calls++
+			if calls == 2 {
+				cancel()
+			}
+			return errDown
+		})
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("got err=%v, want context.Canceled", err)
+		}
+		if calls != 2 {
+			t.Errorf("flush called %d times, want 2 (stop after cancel)", calls)
+		}
+	})
+}
+
+func TestFlushSubscriptions_NoClientKeepsRetryingUntilCancelled(t *testing.T) {
 	NATSClient = nil
-	if err := FlushSubscriptions(time.Second); !errors.Is(err, ErrNotReady) {
-		t.Errorf("FlushSubscriptions without NATSClient = %v, want ErrNotReady", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	err := FlushSubscriptions(ctx, time.Second, 5*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("FlushSubscriptions without NATSClient = %v, want context.DeadlineExceeded", err)
 	}
 }
 

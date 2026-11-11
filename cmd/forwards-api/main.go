@@ -26,9 +26,14 @@ var (
 
 const gracefulShutdownSeconds = 25
 
-// subscriptionFlushTimeout bounds the NATS round trip that confirms the broker
-// has registered all subscriptions before the service reports ready.
-const subscriptionFlushTimeout = 5 * time.Second
+const (
+	// subscriptionFlushTimeout bounds each NATS round trip that confirms the
+	// broker has registered all subscriptions before the service reports ready.
+	subscriptionFlushTimeout = 5 * time.Second
+	// subscriptionFlushRetryInterval is the pause between failed flush attempts
+	// while NATS is unavailable at startup.
+	subscriptionFlushRetryInterval = time.Second
+)
 
 func init() {
 	observability.InitStructureLogConfig("")
@@ -83,12 +88,19 @@ func run() error {
 	healthServer := &http.Server{
 		Handler:           appsvc.HealthHandler(appsvc.Ready),
 		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
+	// startupCtx is cancelled if the health server fails, so the startup flush
+	// retry below stops instead of waiting on a service that can't report ready.
+	startupCtx, cancelStartup := context.WithCancel(ctx)
+	defer cancelStartup()
 	healthErr := make(chan error, 1)
 	go func() {
 		slog.InfoContext(ctx, "health server listening", "port", cfg.Port)
 		if err := healthServer.Serve(healthListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			healthErr <- err
+			cancelStartup()
 		}
 	}()
 	defer func() {
@@ -115,8 +127,19 @@ func run() error {
 	}()
 
 	// QueueSubscribe is asynchronous: confirm the broker has registered every
-	// subscription before /readyz can report ready.
-	if err := appsvc.FlushSubscriptions(subscriptionFlushTimeout); err != nil {
+	// subscription before /readyz can report ready. The NATS client reconnects
+	// on its own, so a broker that is down at startup is retried (with /readyz
+	// still 503) rather than crash-looping the pod.
+	if err := appsvc.FlushSubscriptions(startupCtx, subscriptionFlushTimeout, subscriptionFlushRetryInterval); err != nil {
+		select {
+		case herr := <-healthErr:
+			return fmt.Errorf("health server failed: %w", herr)
+		default:
+		}
+		if ctx.Err() != nil {
+			slog.InfoContext(ctx, "received shutdown signal during startup, stopping")
+			return nil
+		}
 		return fmt.Errorf("flush NATS subscriptions: %w", err)
 	}
 

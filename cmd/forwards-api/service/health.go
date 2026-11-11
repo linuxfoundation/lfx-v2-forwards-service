@@ -4,8 +4,10 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -24,14 +26,41 @@ func ListenHealth(port string) (net.Listener, error) {
 }
 
 // FlushSubscriptions blocks until the broker has processed all subscriptions
-// registered by StartSubscriptions, or returns an error if timeout elapses.
-// Subscribe calls are asynchronous, so call this after StartSubscriptions and
-// before MarkStarted.
-func FlushSubscriptions(timeout time.Duration) error {
-	if NATSClient == nil {
-		return ErrNotReady
+// registered by StartSubscriptions. Subscribe calls are asynchronous, so call
+// this after StartSubscriptions and before MarkStarted.
+//
+// The NATS client reconnects indefinitely, so a broker that is unavailable at
+// startup is not fatal: each failed flush (bounded by timeout) is retried every
+// retryInterval until it succeeds. It returns ctx.Err() if ctx is done first.
+// Until it returns nil the caller has not called MarkStarted, so /readyz stays
+// 503.
+func FlushSubscriptions(ctx context.Context, timeout, retryInterval time.Duration) error {
+	return flushWithRetry(ctx, retryInterval, func() error {
+		if NATSClient == nil {
+			return ErrNotReady
+		}
+		return NATSClient.Flush(timeout)
+	})
+}
+
+// flushWithRetry calls flush until it succeeds, waiting retryInterval between
+// attempts, and returns ctx.Err() if ctx is done first.
+func flushWithRetry(ctx context.Context, retryInterval time.Duration, flush func() error) error {
+	for {
+		err := flush()
+		if err == nil {
+			return nil
+		}
+		slog.WarnContext(ctx, "NATS flush failed, retrying",
+			"error", err,
+			"retry_in", retryInterval,
+		)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(retryInterval):
+		}
 	}
-	return NATSClient.Flush(timeout)
 }
 
 // ErrNotReady is returned by Ready until startup has finished.
