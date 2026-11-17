@@ -96,6 +96,7 @@ Full message contracts: [`pkg/api/forwards.go`](pkg/api/forwards.go).
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `PORT` | No | `8080` | Port the health server listens on (`/livez`, `/readyz` for Kubernetes probes) |
 | `NATS_URL` | Yes | — | NATS server URL |
 | `NATS_CREDENTIALS_FILE` | No | `""` | NKey credentials file path |
 | `FORWARDEMAIL_API_TOKEN` | Yes | — | forwardemail.net basic-auth API token |

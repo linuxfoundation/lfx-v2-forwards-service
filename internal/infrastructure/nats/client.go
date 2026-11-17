@@ -54,6 +54,20 @@ func (c *Client) Close() {
 	}
 }
 
+// Flush performs a round trip to the NATS server and returns once the server
+// has processed everything sent before it, or an error if timeout elapses.
+// QueueSubscribe only queues the SUB protocol message, so flushing after
+// registering subscriptions guarantees the broker has registered them.
+func (c *Client) Flush(timeout time.Duration) error {
+	if c.conn == nil {
+		return newServiceUnavailable("NATS client is not ready")
+	}
+	if err := c.conn.FlushTimeout(timeout); err != nil {
+		return newServiceUnavailable("failed to flush NATS connection", err)
+	}
+	return nil
+}
+
 // IsReady returns an error if the connection is not usable.
 func (c *Client) IsReady() error {
 	if c.conn == nil || !c.conn.IsConnected() || c.conn.IsDraining() {
