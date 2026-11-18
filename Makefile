@@ -15,7 +15,7 @@ HELM_RELEASE_NAME := lfx-v2-forwards-service
 HELM_NAMESPACE := lfx
 HELM_VALUES_FILE := ./charts/lfx-v2-forwards-service/values.local.yaml
 
-GO_VERSION := 1.26.0
+GO_VERSION := 1.26.11
 GOLANGCI_LINT_VERSION := v2.10.1
 LINT_TIMEOUT := 10m
 LINT_TOOL := $(shell go env GOPATH)/bin/golangci-lint
