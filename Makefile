@@ -52,8 +52,11 @@ fmt:
 
 .PHONY: lint
 lint:
-	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-	golangci-lint run ./...
+	@# Reinstall when the pinned version is missing, and build it with the go.mod
+	@# toolchain so it can lint this module.
+	@[ "$$($(LINT_TOOL) version --short 2>/dev/null)" = "$(GOLANGCI_LINT_VERSION:v%=%)" ] || \
+		GOTOOLCHAIN=go$(GO_VERSION) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	$(LINT_TOOL) run ./...
 
 .PHONY: license-check
 license-check:
