@@ -3,7 +3,7 @@
 
 module github.com/linuxfoundation/lfx-v2-forwards-service
 
-go 1.26.11
+go 1.27.4
 
 require (
 	github.com/lestrrat-go/jwx/v2 v2.1.6
