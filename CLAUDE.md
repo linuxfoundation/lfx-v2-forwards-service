@@ -9,7 +9,7 @@ It owns alias **routing** (alias → target email). Alias **ownership** is manag
 
 ## Key Technologies
 
-- **Language**: Go 1.26+
+- **Language**: Go 1.27.4+
 - **Messaging**: NATS core (request/reply, queue groups)
 - **Auth**: Auth0-issued JWTs verified via JWKS (`lestrrat-go/jwx/v2`)
 - **Upstream API**: forwardemail.net REST (stdlib `net/http`, Basic Auth)
@@ -59,10 +59,26 @@ pkg/
 make build       # Compile binary to bin/lfx-v2-forwards-service/forwards-service
 make test        # Run tests with race detector and coverage
 make check       # fmt + lint + license-check + go vet
-make lint        # golangci-lint (v2.10.1)
+make lint        # golangci-lint (v2.15.0)
 ```
 
 Other targets: `make run` (build + execute), `make docker-build`, `make helm-install-local`, `make helm-templates`.
+
+## Go version
+
+This repo targets Go 1.27.x (currently 1.27.4, the latest patch). This
+supersedes the Go version policy in the `lfx-megalinter` skill, which targets
+the latest stable minor minus one: don't move `go.mod` back to Go 1.26. Take
+every 1.27.x patch release, and update `go.mod`, `GO_VERSION` in the
+`Makefile`, this file and `README.md` together.
+
+MegaLinter (v10.2.0) runs Go 1.26.10 in its image, so
+`.github/workflows/mega-linter.yml` sets `GOTOOLCHAIN: auto` to let its Go
+linters download the `go.mod` toolchain. Its bundled golangci-lint 2.15.0 is
+built with Go 1.27.0 and lints this module. osv-scanner's govulncheck call
+analysis is built with Go 1.26 and cannot load it, so osv-scanner falls back
+to matching vulnerabilities by version: any known vulnerability in a
+dependency version fails the check, reachable or not.
 
 ## Conventions
 

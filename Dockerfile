@@ -20,7 +20,8 @@ RUN go build -o /go/bin/forwards-api -trimpath -ldflags="-w -s" github.com/linux
 
 FROM cgr.dev/chainguard/static:latest
 
-USER nonroot
+# Numeric UID of the Chainguard nonroot user, matching the chart's runAsUser.
+USER 65532
 
 COPY --from=builder /go/bin/forwards-api /cmd/forwards-api
 
